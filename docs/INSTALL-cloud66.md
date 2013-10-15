@@ -3,7 +3,7 @@
 ![Logo](http://cdn.cloud66.com/images/easy-deploy.png)
 </a>
 
-Simply follow 7 steps on [building your stack](https://www.cloud66.com/help/first_stack), sign up for a Sendgrid account (for sending emails) and set
+It's very easy to provision, deploy and manage Discourse through [Cloud 66](https://www.cloud66.com). Simply follow 7 steps on [building your stack](https://www.cloud66.com/help/first_stack), sign up for a Sendgrid account (for sending emails) and set
 the environment variables below to have your own fully functioning Discourse installation up and running.
 
 Note: Setting environment variables is done during step five, before you click 'deploy':
