@@ -396,3 +396,12 @@ This change should also be made to your production file.
 
 We take security very seriously at Discourse, and all our code is 100% open source and peer reviewed.
 Please read [our security guide](https://github.com/discourse/discourse/blob/master/docs/SECURITY.md) for an overview of security measures in Discourse.
+
+## Deploying with Cloud 66
+<a href="http://blog.cloud66.com/post/62900887610/introducing-cloud-66-easydeploy">
+![Logo](http://cdn.cloud66.com/images/easy-deploy.png)
+</a>
+
+An easy and powerful alternative to following the steps above is deploying with [Cloud 66](https://www.cloud66.com). Cloud 66 makes it easy to provision, deploy and manage your Discourse setup on any cloud or your own servers.
+
+Click the badge and follow these [instructions](https://github.com/discourse/discourse/blob/master/docs/INSTALL-cloud66.md) to deploy!
