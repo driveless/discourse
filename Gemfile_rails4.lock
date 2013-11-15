@@ -82,6 +82,15 @@ GIT
       omniauth (~> 1.0)
 
 GIT
+  remote: https://github.com/getsentry/raven-ruby.git
+  revision: 20583763170cbc7929338983384fda6b8dca039e
+  specs:
+    sentry-raven (0.6.0)
+      faraday (>= 0.7.6)
+      hashie (>= 1.1.0)
+      uuidtools
+
+GIT
   remote: https://github.com/lawrencepit/email_reply_parser.git
   revision: 67408dfb1b99fb8d5f145f782b9e22d1851a8e5a
   specs:
@@ -109,7 +118,7 @@ PATH
       rails (> 3.1)
 
 GEM
-  remote: https://rubygems.org/
+  remote: http://rubygems.org/
   specs:
     actionmailer (4.0.1)
       actionpack (= 4.0.1)
@@ -449,6 +458,7 @@ GEM
       kgio (~> 2.6)
       rack
       raindrops (~> 0.7)
+    uuidtools (2.1.4)
 
 PLATFORMS
   ruby
@@ -527,6 +537,7 @@ DEPENDENCIES
   sass
   sass-rails
   seed-fu!
+  sentry-raven!
   shoulda
   sidekiq (= 2.15.1)
   sidekiq-failures
