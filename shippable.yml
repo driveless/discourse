@@ -10,4 +10,4 @@ before_script:
 bundler_args: --without development
 script: 'bundle exec rspec && bundle exec rake qunit:test'
 services:
-  - redis-server
+  - redis
