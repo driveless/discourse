@@ -6,6 +6,7 @@ before_script:
   - cp config/redis.yml.sample config/redis.yml
   - rake db:create
   - rake db:migrate
+  - export RAILS3=enable
   - export RUBY_GC_MALLOC_LIMIT=50000000
 bundler_args: --without development
 script: 'bundle exec rspec && bundle exec rake qunit:test'
