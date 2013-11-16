@@ -1,3 +1,4 @@
 Raven.configure do |config|
-    config.dsn = ENV["SENTRY_RAVEN_DSN"] 
+    config.tags = { environment: Rails.env }
+    config.dsn = ENV["SENTRY_RAVEN_DSN"] unless Rails.env == "test"
 end
