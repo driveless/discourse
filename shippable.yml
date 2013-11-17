@@ -1,10 +1,7 @@
 language: ruby
 rvm:
   - "1.9.3"
-before_install:
-  - export RAILS3=enable
 before_script:
-  - export RAILS3=enable
   - cp config/database.yml.development-sample config/database.yml
   - cp config/redis.yml.sample config/redis.yml
   - rake db:migrate
