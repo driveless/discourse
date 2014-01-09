@@ -17,6 +17,7 @@ class TopicQuery
                      visible
                      category
                      sort_order
+                     no_subcategories
                      sort_descending).map(&:to_sym)
 
   # Maps `sort_order` to a columns in `topics`
@@ -24,14 +25,13 @@ class TopicQuery
     'likes' => 'like_count',
     'views' => 'views',
     'posts' => 'posts_count',
-    'activity' => 'bumped_at',
+    'activity' => 'created_at',
     'posters' => 'participant_count',
     'category' => 'category_id'
   }
 
   def initialize(user=nil, options={})
     options.assert_valid_keys(VALID_OPTIONS)
-
     @options = options
     @user = user
   end
@@ -161,9 +161,10 @@ class TopicQuery
       # If we're logged in, we have to pay attention to our pinned settings
       if @user
         result = options[:category].blank? ? result.order(TopicQuerySQL.order_nocategory_with_pinned_sql) :
-                                    result.order(TopicQuerySQL.order_with_pinned_sql)
+                                             result.order(TopicQuerySQL.order_with_pinned_sql)
       else
-        result = result.order(TopicQuerySQL.order_nocategory_basic_bumped)
+        result = options[:category].blank? ? result.order(TopicQuerySQL.order_nocategory_basic_bumped) :
+                                             result.order(TopicQuerySQL.order_basic_bumped)
       end
       result
     end
@@ -176,11 +177,9 @@ class TopicQuery
       # topics. Otherwise, just use bumped_at.
       if sort_column == 'default'
         if sort_dir == 'DESC'
-
           # If something requires a custom order, for example "unread" which sorts the least read
           # to the top, do nothing
           return result if options[:unordered]
-
           # Otherwise apply our default ordering
           return default_ordering(result, options)
         end
@@ -210,12 +209,16 @@ class TopicQuery
       category_id = nil
       if options[:category].present?
         category_id  = options[:category].to_i
-        if category_id == 0
-          result = result.where('categories.slug = ?', options[:category])
-        else
-          result = result.where('categories.id = ?', category_id)
+        category_id = Category.where(slug: options[:category]).pluck(:id).first if category_id == 0
+
+        if category_id
+          if options[:no_subcategories]
+            result = result.where('categories.id = ?', category_id)
+          else
+            result = result.where('categories.id = ? or categories.parent_category_id = ?', category_id, category_id)
+          end
+          result = result.references(:categories)
         end
-        result = result.references(:categories)
       end
 
       result = apply_ordering(result, options)

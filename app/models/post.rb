@@ -15,8 +15,6 @@ class Post < ActiveRecord::Base
   include RateLimiter::OnCreateRecord
   include Trashable
 
-  versioned if: :raw_changed?
-
   rate_limit
   rate_limit :limit_posts_per_day
 
@@ -36,6 +34,9 @@ class Post < ActiveRecord::Base
 
   has_many :post_details
 
+  has_many :post_revisions
+  has_many :revisions, foreign_key: :post_id, class_name: 'PostRevision'
+
   validates_with ::Validators::PostValidator
 
   # We can pass several creating options to a post via attributes
@@ -46,6 +47,7 @@ class Post < ActiveRecord::Base
   scope :by_newest, -> { order('created_at desc, id desc') }
   scope :by_post_number, -> { order('post_number ASC') }
   scope :with_user, -> { includes(:user) }
+  scope :created_since, lambda { |time_ago| where('posts.created_at > ?', time_ago) }
   scope :public_posts, -> { joins(:topic).where('topics.archetype <> ?', Archetype.private_message) }
   scope :private_posts, -> { joins(:topic).where('topics.archetype = ?', Archetype.private_message) }
   scope :with_topic_subtype, ->(subtype) { joins(:topic).where('topics.subtype = ?', subtype) }
@@ -175,8 +177,8 @@ class Post < ActiveRecord::Base
     order('sort_order desc, post_number desc')
   end
 
-  def self.best_of
-    where(["(post_number = 1) or (percent_rank <= ?)", SiteSetting.best_of_percent_filter.to_f / 100.0])
+  def self.summary
+    where(["(post_number = 1) or (percent_rank <= ?)", SiteSetting.summary_percent_filter.to_f / 100.0])
   end
 
   def update_flagged_posts_count
@@ -279,10 +281,6 @@ class Post < ActiveRecord::Base
     end
   end
 
-  def author_readable
-    user.readable_name
-  end
-
   def revise(updated_by, new_raw, opts = {})
     PostRevisor.new(self).revise!(updated_by, new_raw, opts)
   end
@@ -317,11 +315,18 @@ class Post < ActiveRecord::Base
     self.cooked = cook(raw, topic_id: topic_id) unless new_record?
   end
 
+  after_save do
+    save_revision if self.version_changed?
+  end
+
+  after_update do
+    update_revision if self.changed?
+  end
+
   def advance_draft_sequence
     return if topic.blank? # could be deleted
     DraftSequence.next!(last_editor_id, topic.draft_key)
   end
-
 
   # TODO: move to post-analyzer?
   # Determine what posts are quoted by this post
@@ -353,8 +358,11 @@ class Post < ActiveRecord::Base
   end
 
   # Enqueue post processing for this post
-  def trigger_post_process
-    args = { post_id: id }
+  def trigger_post_process(bypass_bump = false)
+    args = {
+      post_id: id,
+      bypass_bump: bypass_bump
+    }
     args[:image_sizes] = image_sizes if image_sizes.present?
     args[:invalidate_oneboxes] = true if invalidate_oneboxes.present?
     Jobs.enqueue(:process_post, args)
@@ -383,9 +391,16 @@ class Post < ActiveRecord::Base
     Post.where(id: post_ids).includes(:user, :topic).order(:id).to_a
   end
 
+  def revert_to(number)
+    return if number >= version
+    post_revision = PostRevision.where(post_id: id, number: number + 1).first
+    post_revision.modifications.each do |attribute, change|
+      attribute = "version" if attribute == "cached_version"
+      write_attribute(attribute, change[0])
+    end
+  end
+
   private
-
-
 
   def parse_quote_into_arguments(quote)
     return {} unless quote.present?
@@ -409,6 +424,27 @@ class Post < ActiveRecord::Base
       Post.where(id: post.id).update_all ['reply_count = reply_count + 1']
     end
   end
+
+  def save_revision
+    modifications = changes.extract!(:raw, :cooked, :edit_reason)
+    # make sure cooked is always present (oneboxes might not change the cooked post)
+    modifications["cooked"] = [self.cooked, self.cooked] unless modifications["cooked"].present?
+    PostRevision.create!(
+      user_id: last_editor_id,
+      post_id: id,
+      number: version,
+      modifications: modifications
+    )
+  end
+
+  def update_revision
+    revision = PostRevision.where(post_id: id, number: version).first
+    return unless revision
+    revision.user_id = last_editor_id
+    revision.modifications = changes.extract!(:raw, :cooked, :edit_reason)
+    revision.save
+  end
+
 end
 
 # == Schema Information
@@ -424,7 +460,7 @@ end
 #  created_at              :datetime         not null
 #  updated_at              :datetime         not null
 #  reply_to_post_number    :integer
-#  cached_version          :integer          default(1), not null
+#  version                 :integer          default(1), not null
 #  reply_count             :integer          default(0), not null
 #  quote_count             :integer          default(0), not null
 #  deleted_at              :datetime
@@ -452,6 +488,7 @@ end
 #  notify_user_count       :integer          default(0), not null
 #  like_score              :integer          default(0), not null
 #  deleted_by_id           :integer
+#  edit_reason             :string(255)
 #
 # Indexes
 #
@@ -459,4 +496,3 @@ end
 #  index_posts_on_reply_to_post_number      (reply_to_post_number)
 #  index_posts_on_topic_id_and_post_number  (topic_id,post_number) UNIQUE
 #
-

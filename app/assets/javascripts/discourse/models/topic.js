@@ -160,6 +160,15 @@ Discourse.Topic = Discourse.Model.extend({
     return I18n.t(this.get('favoriteTooltipKey'));
   }.property('favoriteTooltipKey'),
 
+  estimatedReadingTime: function() {
+    var wordCount = this.get('word_count');
+    if (!wordCount) return;
+
+    // Avg for 500 words per minute when you account for skimming
+    var minutes = Math.floor(wordCount / 500.0);
+    return minutes;
+  }.property('word_count'),
+
   toggleStar: function() {
     var topic = this;
     topic.toggleProperty('starred');
@@ -340,9 +349,9 @@ Discourse.Topic.reopenClass({
       });
     }
 
-    // Add the best of filter if we have it
-    if (opts.bestOf === true) {
-      data.best_of = true;
+    // Add the summary of filter if we have it
+    if (opts.summary === true) {
+      data.summary = true;
     }
 
     // Check the preload store. If not, load it via JSON
@@ -355,7 +364,7 @@ Discourse.Topic.reopenClass({
       data: {destination_topic_id: destinationTopicId}
     }).then(function (result) {
       if (result.success) return result;
-      promise.reject();
+      promise.reject(new Error("error merging topic"));
     });
     return promise;
   },
@@ -366,7 +375,7 @@ Discourse.Topic.reopenClass({
       data: opts
     }).then(function (result) {
       if (result.success) return result;
-      promise.reject();
+      promise.reject(new Error("error moving posts topic"));
     });
     return promise;
   }

@@ -155,7 +155,7 @@ Discourse.Post = Discourse.Model.extend({
       return Discourse.ajax("/posts/" + (this.get('id')), {
         type: 'PUT',
         data: {
-          post: { raw: this.get('raw') },
+          post: { raw: this.get('raw'), edit_reason: this.get('editReason') },
           image_sizes: this.get('imageSizes')
         }
       }).then(function(result) {
@@ -180,7 +180,7 @@ Discourse.Post = Discourse.Model.extend({
         title: this.get('title'),
         image_sizes: this.get('imageSizes'),
         target_usernames: this.get('target_usernames'),
-        auto_close_days: this.get('auto_close_days')
+        auto_close_time: Discourse.Utilities.timestampFromAutocloseString(this.get('auto_close_time'))
       };
 
       var metaData = this.get('metaData');
@@ -337,10 +337,6 @@ Discourse.Post = Discourse.Model.extend({
     });
   },
 
-  loadVersions: function() {
-    return Discourse.ajax("/posts/" + (this.get('id')) + "/versions.json");
-  },
-
   // Whether to show replies directly below
   showRepliesBelow: function() {
     var reply_count = this.get('reply_count');
@@ -403,14 +399,14 @@ Discourse.Post.reopenClass({
     });
   },
 
-  loadVersion: function(postId, version, callback) {
-    return Discourse.ajax("/posts/" + postId + ".json?version=" + version).then(function(result) {
+  loadRevision: function(postId, version) {
+    return Discourse.ajax("/posts/" + postId + "/revisions/" + version + ".json").then(function (result) {
       return Discourse.Post.create(result);
     });
   },
 
   loadQuote: function(postId) {
-    return Discourse.ajax("/posts/" + postId + ".json").then(function(result) {
+    return Discourse.ajax("/posts/" + postId + ".json").then(function (result) {
       var post = Discourse.Post.create(result);
       return Discourse.Quote.build(post, post.get('raw'));
     });

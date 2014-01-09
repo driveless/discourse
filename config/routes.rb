@@ -140,7 +140,7 @@ Discourse::Application.routes.draw do
   get 'user_preferences' => 'users#user_preferences_redirect'
   get 'users/:username/private-messages' => 'user_actions#private_messages', constraints: {username: USERNAME_ROUTE_FORMAT}
   get 'users/:username/private-messages/:filter' => 'user_actions#private_messages', constraints: {username: USERNAME_ROUTE_FORMAT}
-  get 'users/:username' => 'users#show', constraints: {username: USERNAME_ROUTE_FORMAT}
+  get 'users/:username' => 'users#show', as: 'userpage', constraints: {username: USERNAME_ROUTE_FORMAT}
   put 'users/:username' => 'users#update', constraints: {username: USERNAME_ROUTE_FORMAT}
   get 'users/:username/preferences' => 'users#preferences', constraints: {username: USERNAME_ROUTE_FORMAT}, as: :email_preferences
   get 'users/:username/preferences/email' => 'users#preferences', constraints: {username: USERNAME_ROUTE_FORMAT}
@@ -162,9 +162,9 @@ Discourse::Application.routes.draw do
   get 'posts/by_number/:topic_id/:post_number' => 'posts#by_number'
   get 'posts/:id/reply-history' => 'posts#reply_history'
   resources :posts do
-    get 'versions'
     put 'bookmark'
     get 'replies'
+    get 'revisions/:revision' => 'posts#revisions'
     put 'recover'
     collection do
       delete 'destroy_many'
@@ -200,6 +200,7 @@ Discourse::Application.routes.draw do
 
   get 'category/:category.rss' => 'list#category_feed', format: :rss, as: 'category_feed'
   get 'category/:category' => 'list#category', as: 'category_list'
+  get 'category/:category/none' => 'list#category_none', as: 'category_list_none'
   get 'category/:category/more' => 'list#category', as: 'category_list_more'
 
   # We've renamed popular to latest. If people access it we want a permanent redirect.
@@ -240,8 +241,8 @@ Discourse::Application.routes.draw do
   get 't/:slug/:topic_id/wordpress' => 'topics#wordpress', constraints: {topic_id: /\d+/}
   get 't/:slug/:topic_id/moderator-liked' => 'topics#moderator_liked', constraints: {topic_id: /\d+/}
   get 't/:topic_id/wordpress' => 'topics#wordpress', constraints: {topic_id: /\d+/}
-  get 't/:slug/:topic_id/best_of' => 'topics#show', defaults: {best_of: true}, constraints: {topic_id: /\d+/, post_number: /\d+/}
-  get 't/:topic_id/best_of' => 'topics#show', constraints: {topic_id: /\d+/, post_number: /\d+/}
+  get 't/:slug/:topic_id/summary' => 'topics#show', defaults: {summary: true}, constraints: {topic_id: /\d+/, post_number: /\d+/}
+  get 't/:topic_id/summary' => 'topics#show', constraints: {topic_id: /\d+/, post_number: /\d+/}
   put 't/:slug/:topic_id' => 'topics#update', constraints: {topic_id: /\d+/}
   put 't/:slug/:topic_id/star' => 'topics#star', constraints: {topic_id: /\d+/}
   put 't/:topic_id/star' => 'topics#star', constraints: {topic_id: /\d+/}

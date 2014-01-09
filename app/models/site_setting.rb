@@ -7,12 +7,20 @@ class SiteSetting < ActiveRecord::Base
   validates_presence_of :name
   validates_presence_of :data_type
 
-  SiteSettings::YamlLoader.new("#{Rails.root}/config/site_settings.yml").load do |category, name, default, opts|
-    if opts.delete(:client)
-      client_setting(name, default, category)
-    else
-      setting(name, default, category, opts)
+  def self.load_settings(file)
+    SiteSettings::YamlLoader.new(file).load do |category, name, default, opts|
+      if opts.delete(:client)
+        client_setting(name, default, opts.merge(category: category))
+      else
+        setting(name, default, opts.merge(category: category))
+      end
     end
+  end
+
+  load_settings(File.join(Rails.root, 'config', 'site_settings.yml'))
+
+  Dir[File.join(Rails.root, "plugins", "*", "config", "settings.yml")].each do |file|
+    load_settings(file)
   end
 
 
@@ -74,6 +82,10 @@ class SiteSetting < ActiveRecord::Base
 
   def self.authorized_image?(file)
     authorized_images.count > 0 && file.original_filename =~ /\.(#{authorized_images.join("|")})$/i
+  end
+
+  def self.scheme
+    use_ssl? ? "https" : "http"
   end
 
 end

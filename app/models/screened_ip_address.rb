@@ -10,14 +10,6 @@ class ScreenedIpAddress < ActiveRecord::Base
 
   validates :ip_address, ip_address_format: true, presence: true
 
-  def ip_address_error
-    if IPAddr.const_defined?('InvalidAddressError')
-     IPAddr::InvalidAddressError
-    else
-     ArgumentError
-    end
-  end
-
   def self.watch(ip_address, opts={})
     match_for_ip_address(ip_address) || create(opts.slice(:action_type).merge(ip_address: ip_address))
   end
@@ -27,7 +19,10 @@ class ScreenedIpAddress < ActiveRecord::Base
   # inet/cidr columns:
   def ip_address=(val)
     write_attribute(:ip_address, val)
-  rescue self.ip_address_error
+
+  # this gets even messier, Ruby 1.9.2 raised a different exception to Ruby 2.0.0
+  # handle both exceptions
+  rescue ArgumentError, IPAddr::InvalidAddressError
     self.errors.add(:ip_address, :invalid)
   end
 
@@ -49,10 +44,27 @@ class ScreenedIpAddress < ActiveRecord::Base
     exists_for_ip_address_and_action?(ip_address, actions[:do_nothing])
   end
 
-
   def self.exists_for_ip_address_and_action?(ip_address, action_type)
     b = match_for_ip_address(ip_address)
     b.record_match! if b
     !!b and b.action_type == action_type
   end
 end
+
+# == Schema Information
+#
+# Table name: screened_ip_addresses
+#
+#  id            :integer          not null, primary key
+#  ip_address    :inet             not null
+#  action_type   :integer          not null
+#  match_count   :integer          default(0), not null
+#  last_match_at :datetime
+#  created_at    :datetime         not null
+#  updated_at    :datetime         not null
+#
+# Indexes
+#
+#  index_screened_ip_addresses_on_ip_address     (ip_address) UNIQUE
+#  index_screened_ip_addresses_on_last_match_at  (last_match_at)
+#

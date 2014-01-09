@@ -47,23 +47,11 @@ class ListController < ApplicationController
   end
 
   def category
-    query = TopicQuery.new(current_user, page: params[:page])
+    category_response
+  end
 
-    if !@category
-      raise Discourse::NotFound
-      return
-    end
-    guardian.ensure_can_see!(@category)
-    list = query.list_category(@category)
-    @description = @category.description
-
-    if params[:parent_category].present?
-      list.more_topics_url = url_for(category_list_parent_path(params[:parent_category], params[:category], next_page_params))
-    else
-      list.more_topics_url = url_for(category_list_path(params[:category], next_page_params))
-    end
-
-    respond(list)
+  def category_none
+    category_response(no_subcategories: true)
   end
 
   def category_feed
@@ -85,6 +73,15 @@ class ListController < ApplicationController
   end
 
   protected
+
+  def category_response(extra_opts=nil)
+    list_opts = build_topic_list_options
+    list_opts.merge!(extra_opts) if extra_opts
+    query = TopicQuery.new(current_user, list_opts)
+    list = query.list_latest
+    list.more_topics_url = construct_url_with(:latest, list_opts)
+    respond(list)
+  end
 
   def respond(list)
 
@@ -140,14 +137,16 @@ class ListController < ApplicationController
     menu_item = menu_items.select { |item| item.query_should_exclude_category?(action_name, params[:format]) }.first
 
     # exclude_category = 1. from params / 2. parsed from top menu / 3. nil
-    return {
+    result = {
       page: params[:page],
       topic_ids: param_to_integer_list(:topic_ids),
       exclude_category: (params[:exclude_category] || menu_item.try(:filter)),
       category: params[:category],
       sort_order: params[:sort_order],
-      sort_descending: params[:sort_descending]
+      sort_descending: params[:sort_descending],
     }
+    result[:no_subcategories] = true if params[:no_subcategories] == 'true'
+    result
   end
 
   def list_target_user

@@ -8,9 +8,11 @@ require_dependency 'post_destroyer'
 require_dependency 'user_name_suggester'
 require_dependency 'roleable'
 require_dependency 'pretty_text'
+require_dependency 'url_helper'
 
 class User < ActiveRecord::Base
   include Roleable
+  include UrlHelper
 
   has_many :posts
   has_many :notifications, dependent: :destroy
@@ -28,7 +30,7 @@ class User < ActiveRecord::Base
   has_many :user_visits, dependent: :destroy
   has_many :invites, dependent: :destroy
   has_many :topic_links, dependent: :destroy
-  has_many :uploads, dependent: :destroy
+  has_many :uploads
 
   has_one :facebook_user_info, dependent: :destroy
   has_one :twitter_user_info, dependent: :destroy
@@ -46,6 +48,8 @@ class User < ActiveRecord::Base
   has_one :api_key, dependent: :destroy
 
   belongs_to :uploaded_avatar, class_name: 'Upload', dependent: :destroy
+
+  delegate :last_sent_email_address, :to => :email_logs
 
   validates_presence_of :username
   validate :username_validator
@@ -138,6 +142,7 @@ class User < ActiveRecord::Base
   def self.find_by_username(username)
     where(username_lower: username.downcase).first
   end
+
 
   def enqueue_welcome_message(message_type)
     return unless SiteSetting.send_welcome_message?
@@ -241,9 +246,21 @@ class User < ActiveRecord::Base
     @raw_password = password unless password.blank?
   end
 
+  def password
+    '' # so that validator doesn't complain that a password attribute doesn't exist
+  end
+
   # Indicate that this is NOT a passwordless account for the purposes of validation
   def password_required!
     @password_required = true
+  end
+
+  def password_required?
+    !!@password_required
+  end
+
+  def password_validator
+    PasswordValidator.new(attributes: :password).validate_each(self, :password, @raw_password)
   end
 
   def confirm_password?(password)
@@ -276,7 +293,6 @@ class User < ActiveRecord::Base
     end
   end
 
-
   def update_last_seen!(now=Time.zone.now)
     now_date = now.to_date
     # Only update last seen once every minute
@@ -300,20 +316,20 @@ class User < ActiveRecord::Base
   #   - emails
   def small_avatar_url
     template = avatar_template
-    template.gsub("{size}", "45")
+    schemaless template.gsub("{size}", "45")
   end
 
   # the avatars might take a while to generate
   # so return the url of the original image in the meantime
   def uploaded_avatar_path
     return unless SiteSetting.allow_uploaded_avatars? && use_uploaded_avatar
-    uploaded_avatar_template.present? ? uploaded_avatar_template : uploaded_avatar.try(:url)
+    avatar_template = uploaded_avatar_template.present? ? uploaded_avatar_template : uploaded_avatar.try(:url)
+    schemaless avatar_template
   end
 
   def avatar_template
     uploaded_avatar_path || User.gravatar_template(email)
   end
-
 
   # The following count methods are somewhat slow - definitely don't use them in a loop.
   # They might need to be denormalized
@@ -335,6 +351,10 @@ class User < ActiveRecord::Base
 
   def private_topics_count
     topics_allowed.where(archetype: Archetype.private_message).count
+  end
+
+  def posted_too_much_in_topic?(topic_id)
+    trust_level == TrustLevel.levels[:newuser] && (Post.where(topic_id: topic_id, user_id: id).count >= SiteSetting.newuser_max_replies_per_topic)
   end
 
   def bio_excerpt
@@ -493,6 +513,10 @@ class User < ActiveRecord::Base
     ApiKey.where(user_id: self.id).delete_all
   end
 
+  def find_email
+    last_sent_email_address || email
+  end
+
   protected
 
   def cook
@@ -546,12 +570,6 @@ class User < ActiveRecord::Base
       if username_changed? && existing && existing.id != self.id
         errors.add(:username, I18n.t(:'user.username.unique'))
       end
-    end
-  end
-
-  def password_validator
-    if (@raw_password && @raw_password.length < 6) || (@password_required && !@raw_password)
-      errors.add(:password, "must be 6 letters or longer")
     end
   end
 
@@ -628,7 +646,7 @@ end
 #  auto_track_topics_after_msecs :integer
 #  views                         :integer          default(0), not null
 #  flag_level                    :integer          default(0), not null
-#  ip_address                    :string
+#  ip_address                    :inet
 #  new_topic_duration_minutes    :integer
 #  external_links_in_new_tab     :boolean          default(FALSE), not null
 #  enable_quoting                :boolean          default(TRUE), not null
@@ -649,4 +667,3 @@ end
 #  index_users_on_username        (username) UNIQUE
 #  index_users_on_username_lower  (username_lower) UNIQUE
 #
-

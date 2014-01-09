@@ -212,8 +212,7 @@ da:
     unmute: Unmute
     last_post: Sidste indlæg
 
-    best_of:
-      title: "Topindlæg"
+    summary:
       description: "Der er <b>{{count}}</b> indlæg i dette emne. Det er mange! Vil du gerne spare lidt tid, ved kun at se de indlæg der har flest interaktioner og svar?"
       button: 'Vis kun “Topindlæg”'
 
@@ -334,15 +333,15 @@ da:
       none: "Du har ikke nogen notifikationer lige nu."
       more: "se ændre notifikationer"
       mentioned: "<span title='mentioned' class='icon'>@</span> {{username}} {{link}}"
-      quoted: "<i title='quoted' class='icon icon-quote-right'></i> {{username}} {{link}}"
-      replied: "<i title='replied' class='icon icon-reply'></i> {{username}} {{link}}"
-      posted: "<i title='replied' class='icon icon-reply'></i> {{username}} {{link}}"
-      edited: "<i title='edited' class='icon icon-pencil'></i> {{username}} {{link}}"
-      liked: "<i title='liked' class='icon icon-heart'></i> {{username}} {{link}}"
-      private_message: "<i class='icon icon-lock' title='private message'></i> {{username}} har sendt dig en privat besked: {{link}}"
+      quoted: "<i title='quoted' class='fa fa-quote-right'></i> {{username}} {{link}}"
+      replied: "<i title='replied' class='fa fa-reply'></i> {{username}} {{link}}"
+      posted: "<i title='replied' class='fa fa-reply'></i> {{username}} {{link}}"
+      edited: "<i title='edited' class='fa fa-pencil'></i> {{username}} {{link}}"
+      liked: "<i title='liked' class='fa fa-heart'></i> {{username}} {{link}}"
+      private_message: "<i class='fa fa-lock' title='private message'></i> {{username}} har sendt dig en privat besked: {{link}}"
       invited_to_private_message: "{{username}} har inviteret dig til en privat samtale: {{link}}"
-      invitee_accepted: "<i title='accepted your invitation' class='icon icon-signin'></i> {{username}} har accepteret din invitation"
-      moved_post: "<i title='moved post' class='icon icon-arrow-right'></i> {{username}} flyttede indlæg til {{link}}"
+      invitee_accepted: "<i title='accepted your invitation' class='fa fa-sign-in'></i> {{username}} har accepteret din invitation"
+      moved_post: "<i title='moved post' class='fa fa-arrow-right'></i> {{username}} flyttede indlæg til {{link}}"
 
     upload_selector:
       title: "Indsæt billede"
@@ -502,7 +501,7 @@ da:
 
       filters:
         user: "Du ser kun endlæg fra specifikke brugere."
-        best_of: "Du ser kun “Topindlæg”."
+        summary: "Du ser kun “Topindlæg”."
         cancel: "Se alle indlæg i emnet."
 
       move_selected:
@@ -616,7 +615,7 @@ da:
         more: "{{n}} to go..."
         left: "{{n}} remaining"
 
-    topic_summary:
+    topic_map:
       title: "Topic Summary"
       links_shown: "show all {{totalLinks}} links..."
 
@@ -638,7 +637,7 @@ da:
     views_long: "dette emne er blevet vist {{number}} gange"
     activity: "Aktivitet"
     likes: "Synes godt om"
-    top_contributors: "Deltagere"
+    users: "Deltagere"
     category_title: "Kategori"
     history: "Historik"
     changed_by: "af {{author}}"

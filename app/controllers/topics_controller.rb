@@ -1,7 +1,9 @@
 require_dependency 'topic_view'
 require_dependency 'promotion'
+require_dependency 'url_helper'
 
 class TopicsController < ApplicationController
+  include UrlHelper
 
   before_filter :ensure_logged_in, only: [:timings,
                                           :destroy_timings,
@@ -57,7 +59,7 @@ class TopicsController < ApplicationController
 
     perform_show_response
 
-    canonical_url @topic_view.canonical_path
+    canonical_url absolute_without_cdn(@topic_view.canonical_path)
   end
 
   def wordpress
@@ -101,13 +103,14 @@ class TopicsController < ApplicationController
     # TODO: we may need smarter rules about converting archetypes
     topic.archetype = "regular" if current_user.admin? && archetype == 'regular'
 
+    topic.acting_user = current_user
+
     success = false
     Topic.transaction do
-      success = topic.save
-      success = topic.change_category(params[:category]) if success
+      success = topic.save && topic.change_category(params[:category])
     end
-    # this is used to return the title to the client as it may have been
-    # changed by "TextCleaner"
+
+    # this is used to return the title to the client as it may have been changed by "TextCleaner"
     success ? render_serialized(topic, BasicTopicSerializer) : render_json_error(topic)
   end
 
@@ -153,12 +156,15 @@ class TopicsController < ApplicationController
   end
 
   def autoclose
-    raise Discourse::InvalidParameters.new(:auto_close_days) unless params.has_key?(:auto_close_days)
-    @topic = Topic.where(id: params[:topic_id].to_i).first
-    guardian.ensure_can_moderate!(@topic)
-    @topic.set_auto_close(params[:auto_close_days], current_user)
-    @topic.save
-    render nothing: true
+    raise Discourse::InvalidParameters.new(:auto_close_time) unless params.has_key?(:auto_close_time)
+    topic = Topic.where(id: params[:topic_id].to_i).first
+    guardian.ensure_can_moderate!(topic)
+    topic.set_auto_close(params[:auto_close_time], current_user)
+    if topic.save
+      render json: success_json.merge!(auto_close_at: topic.auto_close_at)
+    else
+      render_json_error(topic)
+    end
   end
 
   def destroy

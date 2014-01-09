@@ -36,6 +36,20 @@ Discourse.User = Discourse.Model.extend({
   }.property('username_lower'),
 
   /**
+    This user's display name. Returns the name if possible, otherwise returns the
+    username.
+
+    @property displayName
+    @type {String}
+  **/
+  displayName: function() {
+    if (Discourse.SiteSettings.enable_names && !this.blank('name')) {
+      return this.get('name');
+    }
+    return this.get('username');
+  }.property('username', 'name'),
+
+  /**
     This user's website.
 
     @property websiteName
@@ -52,11 +66,11 @@ Discourse.User = Discourse.Model.extend({
     var desc;
     if(this.get('admin')) {
       desc = I18n.t('user.admin', {user: this.get("name")});
-      return '<i class="icon icon-trophy" title="' + desc +  '" alt="' + desc + '"></i>';
+      return '<i class="fa fa-trophy" title="' + desc +  '" alt="' + desc + '"></i>';
     }
     if(this.get('moderator')){
       desc = I18n.t('user.moderator', {user: this.get("name")});
-      return '<i class="icon icon-magic" title="' + desc +  '" alt="' + desc + '"></i>';
+      return '<i class="fa fa-magic" title="' + desc +  '" alt="' + desc + '"></i>';
     }
     return null;
   }.property('admin','moderator'),
@@ -98,6 +112,10 @@ Discourse.User = Discourse.Model.extend({
   }.property('trust_level'),
 
   isSuspended: Em.computed.equal('suspended', true),
+
+  suspended: function() {
+    return this.get('suspended_till') && moment(this.get('suspended_till')).isAfter();
+  }.property('suspended_till'),
 
   suspendedTillDate: function() {
     return Discourse.Formatter.longDate(this.get('suspended_till'));

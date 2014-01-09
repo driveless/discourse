@@ -46,11 +46,10 @@
   &[href] {
     color: $white;
   }
-  i {font-size: 10px;}
 
   // New posts
 
-  &.new-posts {
+  &.new-posts, &.unread-posts {
     background-color: $blue;
   }
 
@@ -60,7 +59,9 @@
     font-weight: normal;
     background-color: #ddd;
     top: -1px;  
-    color: #666;
+    color: #888;
+    position: relative;
+    margin-left: 2px;
   }
 }
 

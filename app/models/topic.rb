@@ -26,8 +26,6 @@ class Topic < ActiveRecord::Base
     2**31 - 1
   end
 
-  versioned if: :new_version_required?
-
   def featured_users
     @featured_users ||= TopicFeaturedUsers.new(self)
   end
@@ -97,6 +95,9 @@ class Topic < ActiveRecord::Base
   has_many :topic_invites
   has_many :invites, through: :topic_invites, source: :invite
 
+  has_many :topic_revisions
+  has_many :revisions, foreign_key: :topic_id, class_name: 'TopicRevision'
+
   # When we want to temporarily attach some data to a forum topic (usually before serialization)
   attr_accessor :user_data
   attr_accessor :posters  # TODO: can replace with posters_summary once we remove old list code
@@ -145,43 +146,63 @@ class Topic < ActiveRecord::Base
   before_create do
     self.bumped_at ||= Time.now
     self.last_post_user_id ||= user_id
-    if !@ignore_category_auto_close and self.category and self.category.auto_close_days and self.auto_close_at.nil?
-      set_auto_close(self.category.auto_close_days)
+    if !@ignore_category_auto_close and self.category and self.category.auto_close_hours and self.auto_close_at.nil?
+      set_auto_close(self.category.auto_close_hours)
     end
   end
 
   attr_accessor :skip_callbacks
 
   after_create do
-    return if skip_callbacks
 
-    changed_to_category(category)
-    if archetype == Archetype.private_message
-      DraftSequence.next!(user, Draft::NEW_PRIVATE_MESSAGE)
-    else
-      DraftSequence.next!(user, Draft::NEW_TOPIC)
+    unless skip_callbacks
+      changed_to_category(category)
+      if archetype == Archetype.private_message
+        DraftSequence.next!(user, Draft::NEW_PRIVATE_MESSAGE)
+      else
+        DraftSequence.next!(user, Draft::NEW_TOPIC)
+      end
     end
+
   end
 
   before_save do
-    return if skip_callbacks
 
-    if (auto_close_at_changed? and !auto_close_at_was.nil?) or (auto_close_user_id_changed? and auto_close_at)
-      self.auto_close_started_at ||= Time.zone.now if auto_close_at
-      Jobs.cancel_scheduled_job(:close_topic, {topic_id: id})
-      true
+    unless skip_callbacks
+      if (auto_close_at_changed? and !auto_close_at_was.nil?) or (auto_close_user_id_changed? and auto_close_at)
+        self.auto_close_started_at ||= Time.zone.now if auto_close_at
+        Jobs.cancel_scheduled_job(:close_topic, {topic_id: id})
+        true
+      end
+      if category_id.nil? && (archetype.nil? || archetype == Archetype.default)
+        self.category_id = SiteSetting.uncategorized_category_id
+      end
     end
-    if category_id.nil? && (archetype.nil? || archetype == Archetype.default)
-      self.category_id = SiteSetting.uncategorized_category_id
-    end
+
   end
 
   after_save do
-    return if skip_callbacks
+    save_revision if should_create_new_version?
 
-    if auto_close_at and (auto_close_at_changed? or auto_close_user_id_changed?)
-      Jobs.enqueue_at(auto_close_at, :close_topic, {topic_id: id, user_id: auto_close_user_id || user_id})
+    unless skip_callbacks
+      if auto_close_at and (auto_close_at_changed? or auto_close_user_id_changed?)
+        Jobs.enqueue_at(auto_close_at, :close_topic, {topic_id: id, user_id: auto_close_user_id || user_id})
+      end
     end
+
+  end
+
+  def save_revision
+    TopicRevision.create!(
+      user_id: acting_user.id,
+      topic_id: id,
+      number: TopicRevision.where(topic_id: id).count + 2,
+      modifications: changes.extract!(:category, :title)
+    )
+  end
+
+  def should_create_new_version?
+    !new_record? && (category_id_changed? || title_changed?)
   end
 
   def self.top_viewed(max = 10)
@@ -268,8 +289,8 @@ class Topic < ActiveRecord::Base
     @post_numbers ||= posts.order(:post_number).pluck(:post_number)
   end
 
-  def age_in_days
-    ((Time.zone.now - created_at) / 1.day).round
+  def age_in_minutes
+    ((Time.zone.now - created_at) / 1.minute).round
   end
 
   def has_meta_data_boolean?(key)
@@ -602,13 +623,13 @@ class Topic < ActiveRecord::Base
     end
   end
 
-  def auto_close_days=(num_days)
+  def auto_close_hours=(num_hours)
     @ignore_category_auto_close = true
-    set_auto_close(num_days)
+    set_auto_close( num_hours )
   end
 
   def self.auto_close
-    Topic.where("NOT closed AND auto_close_at < ? AND auto_close_user_id IS NOT NULL", 5.minutes.from_now).each do |t|
+    Topic.where("NOT closed AND auto_close_at < ? AND auto_close_user_id IS NOT NULL", 1.minute.ago).each do |t|
       t.auto_close
     end
   end
@@ -622,10 +643,27 @@ class Topic < ActiveRecord::Base
     end
   end
 
-  def set_auto_close(num_days, by_user=nil)
-    num_days = num_days.to_i
-    self.auto_close_at = (num_days > 0 ? num_days.days.from_now : nil)
-    if num_days > 0
+  # Valid arguments for the auto close time:
+  #  * An integer, which is the number of hours from now to close the topic.
+  #  * A time, like "12:00", which is the time at which the topic will close in the current day
+  #    or the next day if that time has already passed today.
+  #  * A timestamp, like "2013-11-25 13:00", when the topic should close.
+  #  * A timestamp with timezone in JSON format. (e.g., "2013-11-26T21:00:00.000Z")
+  #  * nil, to prevent the topic from automatically closing.
+  def set_auto_close(arg, by_user=nil)
+    if arg.is_a?(String) and matches = /^([\d]{1,2}):([\d]{1,2})$/.match(arg.strip)
+      now = Time.zone.now
+      self.auto_close_at = Time.zone.local(now.year, now.month, now.day, matches[1].to_i, matches[2].to_i)
+      self.auto_close_at += 1.day if self.auto_close_at < now
+    elsif arg.is_a?(String) and arg.include?('-') and timestamp = Time.zone.parse(arg)
+      self.auto_close_at = timestamp
+      self.errors.add(:auto_close_at, :invalid) if timestamp < Time.zone.now
+    else
+      num_hours = arg.to_i
+      self.auto_close_at = (num_hours > 0 ? num_hours.hours.from_now : nil)
+    end
+
+    unless self.auto_close_at.nil?
       self.auto_close_started_at ||= Time.zone.now
       if by_user and by_user.staff?
         self.auto_close_user = by_user
@@ -640,6 +678,14 @@ class Topic < ActiveRecord::Base
 
   def read_restricted_category?
     category && category.read_restricted
+  end
+
+  def acting_user
+    @acting_user || user
+  end
+
+  def acting_user=(u)
+    @acting_user = u
   end
 
   private
@@ -692,7 +738,7 @@ end
 #  closed                  :boolean          default(FALSE), not null
 #  archived                :boolean          default(FALSE), not null
 #  bumped_at               :datetime         not null
-#  has_best_of             :boolean          default(FALSE), not null
+#  has_summary             :boolean          default(FALSE), not null
 #  meta_data               :hstore
 #  vote_count              :integer          default(0), not null
 #  archetype               :string(255)      default("regular"), not null
@@ -711,6 +757,7 @@ end
 #  auto_close_user_id      :integer
 #  auto_close_started_at   :datetime
 #  deleted_by_id           :integer
+#  participant_count       :integer          default(1)
 #
 # Indexes
 #
@@ -719,4 +766,3 @@ end
 #  index_topics_on_deleted_at_and_visible_and_archetype_and_id  (deleted_at,visible,archetype,id)
 #  index_topics_on_id_and_deleted_at                            (id,deleted_at)
 #
-

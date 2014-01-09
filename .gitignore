@@ -11,6 +11,7 @@ tags
 dump.rdb
 
 .sass-cache/*
+public/plugins/*
 
 # Ignore bundler config
 /bin
@@ -22,10 +23,8 @@ dump.rdb
 
 /public/assets/*
 
-config/database.yml
-config/redis.yml
 config/discourse.pill
-config/environments/production.rb
+config/discourse.conf
 
 # Ignore the default SQLite database and db dumps
 /db/*.sqlite3
@@ -38,6 +37,7 @@ config/environments/production.rb
 /tmp
 /plugins
 /logfile
+log/
 
 /spec/fixtures/plugins/my_plugin/auto_generated
 

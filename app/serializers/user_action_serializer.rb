@@ -21,7 +21,8 @@ class UserActionSerializer < ApplicationSerializer
              :title,
              :deleted,
              :hidden,
-             :moderator_action
+             :moderator_action,
+             :edit_reason
 
   def excerpt
     PrettyText.excerpt(object.cooked,300) if object.cooked
@@ -43,6 +44,18 @@ class UserActionSerializer < ApplicationSerializer
                 object.acting_uploaded_avatar_template,
                 object.acting_uploaded_avatar_id
     )
+  end
+
+  def include_name?
+    SiteSetting.enable_names?
+  end
+
+  def include_target_name?
+    include_name?
+  end
+
+  def include_acting_name?
+    include_name?
   end
 
   def slug

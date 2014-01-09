@@ -1,27 +1,35 @@
 /**
   Renders a drop down for selecting a category
 
-  @class DiscourseCategorydropComponent
+  @class CategoryDropComponent
   @extends Ember.Component
   @namespace Discourse
   @module Discourse
 **/
-Discourse.DiscourseCategorydropComponent = Ember.Component.extend({
+Discourse.CategoryDropComponent = Ember.Component.extend({
   classNameBindings: ['category::no-category', 'categories:has-drop'],
   tagName: 'li',
 
   iconClass: function() {
-    if (this.get('expanded')) { return "icon icon-caret-down"; }
-    return "icon icon-caret-right";
+    if (this.get('expanded')) { return "fa fa-caret-down"; }
+    return "fa fa-caret-right";
   }.property('expanded'),
 
   allCategoriesUrl: function() {
-    return this.get('category.parentCategory.url') || "/";
-  }.property('category'),
+    if (this.get('subCategory')) {
+      return this.get('parentCategory.url') || "/";
+    } else {
+      return "/";
+    }
+  }.property('parentCategory.url', 'subCategory'),
+
+  noCategoriesUrl: function() {
+    return this.get('parentCategory.url') + "/none";
+  }.property('parentCategory.url'),
 
   allCategoriesLabel: function() {
     if (this.get('subCategory')) {
-      return I18n.t('categories.only_category', {categoryName: this.get('parentCategory.name')});
+      return I18n.t('categories.all_subcategories', {categoryName: this.get('parentCategory.name')});
     }
     return I18n.t('categories.all');
   }.property('category'),

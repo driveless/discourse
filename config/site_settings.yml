@@ -32,10 +32,10 @@ basic:
     default: ''
   enable_wide_category_list:
     client: true
-    default: false
+    default: true
   category_featured_topics:
     client: true
-    default: 6
+    default: 3
   topics_per_page: 30
   posts_per_page:
     client: true
@@ -76,6 +76,9 @@ users:
   must_approve_users:
     client: true
     default: false
+  min_password_length:
+    client: true
+    default: 8
   enable_google_logins:
     client: true
     default: true
@@ -105,7 +108,7 @@ users:
   enable_persona_logins:
     client: true
     default: false
-  enforce_global_nicknames: true
+  enforce_global_nicknames: false
   discourse_org_access_key: ''
   invite_expiry_days: 14
   username_change_period: 3
@@ -134,7 +137,9 @@ posting:
       default: 10
   max_post_length:
     client: true
-    default: 32000
+    default:
+      test: 4000
+      default: 32000
   min_topic_title_length:
     client: true
     default: 15
@@ -175,6 +180,7 @@ posting:
     default: true
   post_undo_action_window_mins: 10
   max_mentions_per_post: 10
+  newuser_max_replies_per_topic: 3
   newuser_max_mentions_per_post: 2
   onebox_max_chars: 5000
   title_min_entropy: 10
@@ -195,6 +201,12 @@ posting:
   display_name_on_posts:
     client: true
     default: false
+  short_progress_text_threshold:
+    client: true
+    default: 1000
+  default_code_lang:
+    client: true
+    default: "lang-auto"
 
 email:
   email_time_window_mins: 10
@@ -233,7 +245,8 @@ files:
     default: 500
   create_thumbnails: true
   clean_up_uploads: false
-  uploads_grace_period_in_hours: 1
+  clean_orphan_uploads_grace_period_hours: 1
+  purge_deleted_uploads_grace_period_days: 30
   enable_s3_uploads: false
   s3_access_key_id: ''
   s3_secret_access_key: ''
@@ -249,6 +262,12 @@ files:
     default: false
   detect_custom_avatars: true
   max_daily_gravatar_crawls: 500
+  download_remote_images_to_local:
+    default:
+      test: false
+      default: true
+  download_remote_images_threshold:
+    default: 20
 
 trust:
   default_trust_level: 0
@@ -365,10 +384,10 @@ uncategorized:
   active_user_rate_limit_secs: 60
   previous_visit_timeout_hours: 1
   staff_like_weight: 3
-  best_of_score_threshold: 15
-  best_of_posts_required: 50
-  best_of_likes_required: 1
-  best_of_percent_filter: 20
+  summary_score_threshold: 15
+  summary_posts_required: 50
+  summary_likes_required: 1
+  summary_percent_filter: 20
   send_welcome_message: true
   allow_import: false
   educate_until_posts:

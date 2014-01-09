@@ -1,6 +1,5 @@
 require_dependency 'discourse_hub'
 require_dependency 'user_name_suggester'
-require_dependency 'user_activator'
 require_dependency 'avatar_upload_service'
 
 class UsersController < ApplicationController
@@ -9,6 +8,7 @@ class UsersController < ApplicationController
   skip_before_filter :check_xhr, only: [:show, :password_reset, :update, :activate_account, :authorize_email, :user_preferences_redirect, :avatar]
 
   before_filter :ensure_logged_in, only: [:username, :update, :change_email, :user_preferences_redirect, :upload_avatar, :toggle_avatar]
+  before_filter :respond_to_suspicious_request, only: [:create]
 
   # we need to allow account creation with bad CSRF tokens, if people are caching, the CSRF token on the
   #  page is going to be empty, this means that server will see an invalid CSRF and blow the session
@@ -44,7 +44,7 @@ class UsersController < ApplicationController
     user = fetch_user_from_params
     guardian.ensure_can_edit!(user)
     json_result(user, serializer: UserSerializer) do |u|
-      updater = UserUpdater.new(user)
+      updater = UserUpdater.new(current_user, user)
       updater.update(params)
     end
   end
@@ -97,7 +97,10 @@ class UsersController < ApplicationController
   # Used for checking availability of a username and will return suggestions
   # if the username is not available.
   def check_username
-    params.require(:username)
+    if !params[:username].present?
+      params.require(:username) if !params[:email].present?
+      return render(json: success_json) unless SiteSetting.call_discourse_hub?
+    end
     username = params[:username]
 
     target_user = user_from_params_or_current_user
@@ -107,7 +110,7 @@ class UsersController < ApplicationController
 
     checker = UsernameCheckerService.new
     email = params[:email] || target_user.try(:email)
-    render(json: checker.check_username(username, email))
+    render json: checker.check_username(username, email)
   rescue RestClient::Forbidden
     render json: {errors: [I18n.t("discourse_hub.access_token_problem")]}
   end
@@ -117,17 +120,39 @@ class UsersController < ApplicationController
   end
 
   def create
-    return fake_success_response if suspicious? params
+    user = User.new(user_params)
 
-    user = User.new_from_params(params)
-    user.ip_address = request.ip
-    auth = authenticate_user(user, params)
-    register_nickname(user)
+    authentication = UserAuthenticator.new(user, session)
+    authentication.start
 
-    user.save ? user_create_successful(user, auth) : user_create_failed(user)
+    activation = UserActivator.new(user, request, session, cookies)
+    activation.start
 
+    if user.save
+      authentication.finish
+      activation.finish
+
+      render json: {
+        success: true,
+        active: user.active?,
+        message: activation.message
+      }
+    else
+      render json: {
+        success: false,
+        message: I18n.t(
+          'login.errors',
+          errors: user.errors.full_messages.join("\n")
+        ),
+        errors: user.errors.to_hash,
+        values: user.attributes.slice('name', 'username', 'email')
+      }
+    end
   rescue ActiveRecord::StatementInvalid
-    render json: { success: false, message: I18n.t("login.something_already_taken") }
+    render json: {
+      success: false,
+      message: I18n.t("login.something_already_taken")
+    }
   rescue DiscourseHub::NicknameUnavailable => e
     render json: e.response_message
   rescue RestClient::Forbidden
@@ -147,6 +172,7 @@ class UsersController < ApplicationController
     elsif request.put?
       raise Discourse::InvalidParameters.new(:password) unless params[:password].present?
       @user.password = params[:password]
+      @user.password_required!
       logon_after_password_reset if @user.save
     end
     render layout: 'no_js'
@@ -322,67 +348,6 @@ class UsersController < ApplicationController
       challenge
     end
 
-    def suspicious?(params)
-      honeypot_or_challenge_fails?(params) || SiteSetting.invite_only?
-    end
-
-    def fake_success_response
-      render(
-        json: {
-          success: true,
-          active: false,
-          message: I18n.t("login.activate_email", email: params[:email])
-        }
-      )
-    end
-
-    def honeypot_or_challenge_fails?(params)
-      params[:password_confirmation] != honeypot_value ||
-      params[:challenge] != challenge_value.try(:reverse)
-    end
-
-    def valid_session_authentication?(auth, email)
-      auth && auth[:email] == email && auth[:email_valid]
-    end
-
-    def create_third_party_auth_records(user, auth)
-      return unless auth && auth[:authenticator_name]
-
-      authenticator = Users::OmniauthCallbacksController.find_authenticator(auth[:authenticator_name])
-      authenticator.after_create_account(user, auth)
-    end
-
-    def register_nickname(user)
-      if user.valid? && SiteSetting.call_discourse_hub?
-        DiscourseHub.register_nickname(user.username, user.email)
-      end
-    end
-
-    def user_create_successful(user, auth)
-      activator = UserActivator.new(user, request, session, cookies)
-      create_third_party_auth_records(user, auth)
-
-      # Clear authentication session.
-      session[:authentication] = nil
-      render json: { success: true, active: user.active?, message: activator.activation_message }
-    end
-
-    def user_create_failed(user)
-      render json: {
-        success: false,
-        message: I18n.t("login.errors", errors: user.errors.full_messages.join("\n")),
-        errors: user.errors.to_hash,
-        values: user.attributes.slice("name", "username", "email")
-      }
-    end
-
-    def authenticate_user(user, params)
-      auth = session[:authentication]
-      user.active = true if valid_session_authentication?(auth, params[:email])
-      user.password_required! unless auth
-      auth
-    end
-
     def build_avatar_from(file)
       source = if file.is_a?(String)
                  is_api? ? :url : (raise FastImage::UnknownImageType)
@@ -400,4 +365,33 @@ class UsersController < ApplicationController
       render json: { url: upload.url, width: upload.width, height: upload.height }
     end
 
+    def respond_to_suspicious_request
+      if suspicious?(params)
+        render(
+          json: {
+            success: true,
+            active: false,
+            message: I18n.t("login.activate_email", email: params[:email])
+          }
+        )
+      end
+    end
+
+    def suspicious?(params)
+      honeypot_or_challenge_fails?(params) || SiteSetting.invite_only?
+    end
+
+    def honeypot_or_challenge_fails?(params)
+      params[:password_confirmation] != honeypot_value ||
+        params[:challenge] != challenge_value.try(:reverse)
+    end
+
+    def user_params
+      params.permit(
+        :name,
+        :email,
+        :password,
+        :username
+      ).merge(ip_address: request.ip)
+    end
 end

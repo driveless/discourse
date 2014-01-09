@@ -7,12 +7,10 @@
   @module Discourse
 **/
 Discourse.TopicRoute = Discourse.Route.extend({
-
   redirect: function() { Discourse.redirectIfLoginRequired(this); },
 
   actions: {
     // Modals that can pop up within a topic
-
     showPosterExpansion: function(post) {
       this.controllerFor('posterExpansion').show(post);
     },
@@ -51,7 +49,7 @@ Discourse.TopicRoute = Discourse.Route.extend({
 
     showHistory: function(post) {
       Discourse.Route.showModal(this, 'history', post);
-      this.controllerFor('history').refresh();
+      this.controllerFor('history').refresh(post.get("id"), post.get("version"));
       this.controllerFor('modal').set('modalClass', 'history-modal');
     },
 
@@ -61,7 +59,17 @@ Discourse.TopicRoute = Discourse.Route.extend({
 
     splitTopic: function() {
       Discourse.Route.showModal(this, 'splitTopic', this.modelFor('topic'));
-    }
+    },
+
+    // Use replaceState to update the URL once it changes
+    postChangedRoute: Discourse.debounce(function(currentPost) {
+      var topic = this.modelFor('topic');
+      if (topic && currentPost) {
+        var postUrl = topic.get('url');
+        if (currentPost > 1) { postUrl += "/" + currentPost; }
+        Discourse.URL.replaceState(postUrl);
+      }
+    }, 1000)
 
   },
 
@@ -120,10 +128,13 @@ Discourse.TopicRoute = Discourse.Route.extend({
       editingTopic: false
     });
 
+    Discourse.TopicRoute.trigger('setupTopicController', this);
+
     this.controllerFor('header').setProperties({
       topic: model,
       showExtraInfo: false
     });
+
     this.controllerFor('composer').set('topic', model);
     Discourse.TopicTrackingState.current().trackIncoming('all');
     controller.subscribe();
@@ -134,4 +145,4 @@ Discourse.TopicRoute = Discourse.Route.extend({
 
 });
 
-
+RSVP.EventTarget.mixin(Discourse.TopicRoute);
