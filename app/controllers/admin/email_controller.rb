@@ -11,12 +11,17 @@ class Admin::EmailController < Admin::AdminController
 
   def test
     params.require(:email_address)
-    Jobs.enqueue(:test_email, to_address: params[:email_address])
+    Jobs::TestEmail.new.execute(to_address: params[:email_address])
     render nothing: true
   end
 
   def logs
-    @email_logs = EmailLog.limit(50).includes(:user).order('created_at desc').to_a
+    @email_logs = EmailLog.sent.limit(50).includes(:user).order('created_at desc').to_a
+    render_serialized(@email_logs, EmailLogSerializer)
+  end
+
+  def skipped
+    @email_logs = EmailLog.skipped.limit(50).includes(:user).order('created_at desc').to_a
     render_serialized(@email_logs, EmailLogSerializer)
   end
 

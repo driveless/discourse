@@ -14,8 +14,14 @@
 
 #login-form {
   a {
-    color: $dark_gray;
+    color: $primary_medium;
     cursor: pointer;
+  }
+}
+
+.login-modal {
+  .fa-spinner {
+    font-size: 18px;
   }
 }
 
@@ -26,6 +32,12 @@
 }
 
 .create-account {
+  form {
+    margin-bottom: 0;
+  }
+  table {
+    width: 100%;
+  }
   tr.input {
     td {
       padding-top: 10px;
@@ -33,11 +45,22 @@
     input, label {
       margin-bottom: 0;
     }
+    .tip {
+      max-width: 340px;
+    }
   }
 
   tr.instructions {
     label {
-      color: #888;
+      color: $primary_light;
     }
+  }
+
+  .fa-spinner {
+    font-size: 18px;
+  }
+
+  .tos-agree {
+    margin-bottom: 12px;
   }
 }

@@ -24,7 +24,6 @@ describe User do
   it { should have_one(:facebook_user_info).dependent(:destroy) }
   it { should have_one(:twitter_user_info).dependent(:destroy) }
   it { should have_one(:github_user_info).dependent(:destroy) }
-  it { should have_one(:cas_user_info).dependent(:destroy) }
   it { should have_one(:oauth2_user_info).dependent(:destroy) }
   it { should have_one(:user_stat).dependent(:destroy) }
   it { should belong_to(:approved_by) }
@@ -762,20 +761,39 @@ describe User do
     context "with a user that has a link in their bio" do
       let(:user) { Fabricate.build(:user, bio_raw: "im sissy and i love http://ponycorns.com") }
 
-      before do
-        # Let's cook that bio up good
+      it "includes the link as nofollow if the user is not new" do
         user.send(:cook)
-      end
-
-      it "includes the link if the user is not new" do
         expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com' rel='nofollow'>http://ponycorns.com</a>")
         expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\" rel=\"nofollow\">http://ponycorns.com</a></p>")
       end
 
       it "removes the link if the user is new" do
         user.trust_level = TrustLevel.levels[:newuser]
+        user.send(:cook)
         expect(user.bio_excerpt).to eq("im sissy and i love http://ponycorns.com")
         expect(user.bio_processed).to eq("<p>im sissy and i love http://ponycorns.com</p>")
+      end
+
+      it "includes the link without nofollow if the user is trust level 3 or higher" do
+        user.trust_level = TrustLevel.levels[:leader]
+        user.send(:cook)
+        expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com'>http://ponycorns.com</a>")
+        expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\">http://ponycorns.com</a></p>")
+      end
+
+      it "removes nofollow from links in bio when trust level is increased" do
+        user.save
+        user.change_trust_level!(:leader)
+        expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com'>http://ponycorns.com</a>")
+        expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\">http://ponycorns.com</a></p>")
+      end
+
+      it "adds nofollow to links in bio when trust level is decreased" do
+        user.trust_level = TrustLevel.levels[:leader]
+        user.save
+        user.change_trust_level!(:regular)
+        expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com' rel='nofollow'>http://ponycorns.com</a>")
+        expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\" rel=\"nofollow\">http://ponycorns.com</a></p>")
       end
     end
 
@@ -903,6 +921,36 @@ describe User do
 
   end
 
+  describe "posted too much in topic" do
+    let!(:user) { Fabricate(:user, trust_level: TrustLevel.levels[:newuser]) }
+    let!(:topic) { Fabricate(:post).topic }
+
+    before do
+      # To make testing easier, say 1 reply is too much
+      SiteSetting.stubs(:newuser_max_replies_per_topic).returns(1)
+    end
+
+    context "for a user who didn't create the topic" do
+      let!(:post) { Fabricate(:post, topic: topic, user: user) }
+
+      it "does not return true for staff" do
+        user.stubs(:staff?).returns(true)
+        user.posted_too_much_in_topic?(topic.id).should be_false
+      end
+
+      it "returns true when the user has posted too much" do
+        user.posted_too_much_in_topic?(topic.id).should be_true
+      end
+    end
+
+    it "returns false for a user who created the topic" do
+      topic_user = topic.user
+      topic_user.trust_level = TrustLevel.levels[:newuser]
+      topic.user.posted_too_much_in_topic?(topic.id).should be_false
+    end
+
+  end
+
   describe "#find_email" do
 
     let(:user) { Fabricate(:user, email: "bob@example.com") }
@@ -934,7 +982,7 @@ describe User do
 
   describe ".small_avatar_url" do
 
-    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "http://test.localhost/uploaded/avatar/template/{size}.png") }
+    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "/uploaded/avatar/template/{size}.png") }
 
     it "returns a 45-pixel-wide avatar" do
       user.small_avatar_url.should == "//test.localhost/uploaded/avatar/template/45.png"
@@ -944,7 +992,7 @@ describe User do
 
   describe ".uploaded_avatar_path" do
 
-    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "http://test.localhost/uploaded/avatar/template/{size}.png") }
+    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "/uploaded/avatar/template/{size}.png") }
 
     it "returns nothing when uploaded avatars are not allowed" do
       SiteSetting.expects(:allow_uploaded_avatars).returns(false)
@@ -955,6 +1003,11 @@ describe User do
       user.uploaded_avatar_path.should == "//test.localhost/uploaded/avatar/template/{size}.png"
     end
 
+    it "returns a schemaless cdn-based avatar template" do
+      Rails.configuration.action_controller.stubs(:asset_host).returns("http://my.cdn.com")
+      user.uploaded_avatar_path.should == "//my.cdn.com/uploaded/avatar/template/{size}.png"
+    end
+
   end
 
   describe ".avatar_template" do
@@ -962,8 +1015,8 @@ describe User do
     let(:user) { build(:user, email: "em@il.com") }
 
     it "returns the uploaded_avatar_path by default" do
-      user.expects(:uploaded_avatar_path).returns("/uploaded/avatar.png")
-      user.avatar_template.should == "/uploaded/avatar.png"
+      user.expects(:uploaded_avatar_path).returns("//discourse.org/uploaded/avatar.png")
+      user.avatar_template.should == "//discourse.org/uploaded/avatar.png"
     end
 
     it "returns the gravatar when no avatar has been uploaded" do
@@ -974,4 +1027,57 @@ describe User do
 
   end
 
+  describe "update_posts_read!" do
+    context "with a UserVisit record" do
+      let!(:user) { Fabricate(:user) }
+      let!(:now)  { Time.zone.now }
+      before { user.update_last_seen!(now) }
+
+      it "with existing UserVisit record, increments the posts_read value" do
+        expect {
+          user_visit = user.update_posts_read!(2)
+          user_visit.posts_read.should == 2
+        }.to_not change { UserVisit.count }
+      end
+
+      it "with no existing UserVisit record, creates a new UserVisit record and increments the posts_read count" do
+        expect {
+          user_visit = user.update_posts_read!(3, 5.days.ago)
+          user_visit.posts_read.should == 3
+        }.to change { UserVisit.count }.by(1)
+      end
+    end
+  end
+
+  describe "primary_group_id" do
+    let!(:user) { Fabricate(:user) }
+
+    it "has no primary_group_id by default" do
+      user.primary_group_id.should be_nil
+    end
+
+    context "when the user has a group" do
+      let!(:group) { Fabricate(:group) }
+
+      before do
+        group.usernames = user.username
+        group.save
+        user.primary_group_id = group.id
+        user.save
+        user.reload
+      end
+
+      it "should allow us to use it as a primary group" do
+        user.primary_group_id.should == group.id
+
+        # If we remove the user from the group
+        group.usernames = ""
+        group.save
+
+        # It should unset it from the primary_group_id
+        user.reload
+        user.primary_group_id.should be_nil
+      end
+    end
+  end
 end

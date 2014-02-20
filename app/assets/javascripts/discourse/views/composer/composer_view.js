@@ -1,4 +1,4 @@
-/*global Markdown:true assetPath:true */
+/*global assetPath:true */
 
 /**
   This view handles rendering of the composer
@@ -88,7 +88,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     });
   }.observes('model.composeState'),
 
-  keyUp: function(e) {
+  keyUp: function() {
     var controller = this.get('controller');
     controller.checkReplyLength();
 
@@ -97,9 +97,9 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
 
     // One second from now, check to see if the last key was hit when
     // we recorded it. If it was, the user paused typing.
-    var composerView = this;
+    var self = this;
     Em.run.later(function() {
-      if (lastKeyUp !== composerView.get('lastKeyUp')) return;
+      if (lastKeyUp !== self.get('lastKeyUp')) return;
 
       // Search for similar topics if the user pauses typing
       controller.findSimilarTopics();
@@ -107,9 +107,14 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
   },
 
   keyDown: function(e) {
-    // If the user hit ESC
     if (e.which === 27) {
+      // ESC
       this.get('controller').hitEsc();
+      return false;
+    } else if (e.which === 13 && (e.ctrlKey || e.metaKey)) {
+      // CTRL+ENTER or CMD+ENTER
+      this.get('controller').send('save');
+      return false;
     }
   },
 
@@ -121,9 +126,15 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
   },
 
   ensureMaximumDimensionForImagesInPreview: function() {
-    $('<style>#wmd-preview img, .cooked img {' +
-      'max-width:' + Discourse.SiteSettings.max_image_width + 'px!important;' +
-      'max-height:' + Discourse.SiteSettings.max_image_height + 'px!important;' +
+    // This enforce maximum dimensions of images in the preview according
+    // to the current site settings.
+    // For interactivity, we immediately insert the locally cooked version
+    // of the post into the stream when the user hits reply. We therefore also
+    // need to enforce these rules on the .cooked version.
+    // Meanwhile, the server is busy post-processing the post and generating thumbnails.
+    $('<style>#wmd-preview img:not(.thumbnail), .cooked img:not(.thumbnail) {' +
+      'max-width:' + Discourse.SiteSettings.max_image_width + 'px;' +
+      'max-height:' + Discourse.SiteSettings.max_image_height + 'px;' +
       '}</style>'
      ).appendTo('head');
   },
@@ -163,7 +174,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
   initEditor: function() {
     // not quite right, need a callback to pass in, meaning this gets called once,
     // but if you start replying to another topic it will get the avatars wrong
-    var $wmdInput, editor, composerView = this;
+    var $wmdInput, editor, self = this;
     this.wmdInput = $wmdInput = $('#wmd-input');
     if ($wmdInput.length === 0 || $wmdInput.data('init') === true) return;
 
@@ -177,16 +188,23 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
       dataSource: function(term) {
         return Discourse.UserSearch.search({
           term: term,
-          topicId: composerView.get('controller.controllers.topic.model.id')
+          topicId: self.get('controller.controllers.topic.model.id'),
+          include_groups: true
         });
       },
       key: "@",
-      transformComplete: function(v) { return v.username; }
+      transformComplete: function(v) {
+          if (v.username) {
+            return v.username;
+          } else {
+            return v.usernames.join(", @");
+          }
+        }
     });
 
     this.editor = editor = Discourse.Markdown.createEditor({
       lookupAvatarByPostNumber: function(postNumber) {
-        var posts = composerView.get('controller.controllers.topic.postStream.posts');
+        var posts = self.get('controller.controllers.topic.postStream.posts');
         if (posts) {
           var quotedPost = posts.findProperty("post_number", postNumber);
           if (quotedPost) {
@@ -196,15 +214,14 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
       }
     });
 
-    var $uploadTarget = $('#reply-control');
     this.editor.hooks.insertImageDialog = function(callback) {
       callback(null);
-      composerView.get('controller').send('showUploadSelector', composerView);
+      self.get('controller').send('showUploadSelector', self);
       return true;
     };
 
     this.editor.hooks.onPreviewRefresh = function() {
-      return composerView.afterRender();
+      return self.afterRender();
     };
 
     this.editor.run();
@@ -212,7 +229,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     this.loadingChanged();
 
     var saveDraft = Discourse.debounce((function() {
-      return composerView.get('controller').saveDraft();
+      return self.get('controller').saveDraft();
     }), 2000);
 
     $wmdInput.keyup(function() {
@@ -225,7 +242,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     $replyTitle.keyup(function() {
       saveDraft();
       // removes the red background once the requirements are met
-      if (composerView.get('model.missingTitleCharacters') <= 0) {
+      if (self.get('model.missingTitleCharacters') <= 0) {
         $replyTitle.removeClass("requirements-not-met");
       }
       return true;
@@ -234,33 +251,34 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     // when the title field loses the focus...
     $replyTitle.blur(function(){
       // ...and the requirements are not met (ie. the minimum number of characters)
-      if (composerView.get('model.missingTitleCharacters') > 0) {
+      if (self.get('model.missingTitleCharacters') > 0) {
         // then, "redify" the background
         $replyTitle.toggleClass("requirements-not-met", true);
       }
     });
 
-    // In case it's still bound somehow
-    $uploadTarget.fileupload('destroy');
-    $uploadTarget.off();
+    // in case it's still bound somehow
+    this._unbindUploadTarget();
+
+    var $uploadTarget = $('#reply-control');
 
     $uploadTarget.fileupload({
-        url: Discourse.getURL('/uploads'),
-        dataType: 'json'
+      url: Discourse.getURL('/uploads'),
+      dataType: 'json'
     });
 
     // submit - this event is triggered for each upload
     $uploadTarget.on('fileuploadsubmit', function (e, data) {
       var result = Discourse.Utilities.validateUploadedFiles(data.files);
       // reset upload status when everything is ok
-      if (result) composerView.setProperties({ uploadProgress: 0, isUploading: true });
+      if (result) self.setProperties({ uploadProgress: 0, isUploading: true });
       return result;
     });
 
     // send - this event is triggered when the upload request is about to start
     $uploadTarget.on('fileuploadsend', function (e, data) {
       // hide the "file selector" modal
-      composerView.get('controller').send('closeModal');
+      self.get('controller').send('closeModal');
       // cf. https://github.com/blueimp/jQuery-File-Upload/wiki/API#how-to-cancel-an-upload
       var jqXHR = data.xhr();
       // need to wait for the link to show up in the DOM
@@ -279,7 +297,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     // progress all
     $uploadTarget.on('fileuploadprogressall', function (e, data) {
       var progress = parseInt(data.loaded / data.total * 100, 10);
-      composerView.set('uploadProgress', progress);
+      self.set('uploadProgress', progress);
     });
 
     // done
@@ -288,8 +306,8 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
       if (data.result.url) {
         var markdown = Discourse.Utilities.getUploadMarkdown(data.result);
         // appends a space at the end of the inserted markdown
-        composerView.addMarkdown(markdown + " ");
-        composerView.set('isUploading', false);
+        self.addMarkdown(markdown + " ");
+        self.set('isUploading', false);
       } else {
         bootbox.alert(I18n.t('post.errors.upload'));
       }
@@ -298,7 +316,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     // fail
     $uploadTarget.on('fileuploadfail', function (e, data) {
       // hide upload status
-      composerView.set('isUploading', false);
+      self.set('isUploading', false);
       // display an error message
       Discourse.Utilities.displayErrorForUpload(data);
     });
@@ -307,7 +325,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     // to finish.
     return Em.run.later(jQuery, (function() {
       var replyTitle = $('#reply-title');
-      composerView.resize();
+      self.resize();
       return replyTitle.length ? replyTitle.putCursorAtEnd() : $wmdInput.putCursorAtEnd();
     }), 300);
   },
@@ -327,17 +345,22 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
   imageSizes: function() {
     var result = {};
     $('#wmd-preview img').each(function(i, e) {
-      var $img = $(e);
-      result[$img.prop('src')] = {
-        width: $img.width(),
-        height: $img.height()
-      };
+      var $img = $(e),
+          src = $img.prop('src');
+
+      if (src && src.length) {
+        result[src] = { width: $img.width(), height: $img.height() };
+      }
     });
     return result;
   },
 
-  childDidInsertElement: function(e) {
+  childDidInsertElement: function() {
     return this.initEditor();
+  },
+
+  childWillDestroyElement: function() {
+    this._unbindUploadTarget();
   },
 
   toggleAdminOptions: function() {
@@ -389,7 +412,13 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     if( reason ) {
       return Discourse.InputValidation.create({ failed: true, reason: reason });
     }
-  }.property('model.reply', 'model.replyLength', 'model.missingReplyCharacters', 'model.minimumPostLength')
+  }.property('model.reply', 'model.replyLength', 'model.missingReplyCharacters', 'model.minimumPostLength'),
+
+  _unbindUploadTarget: function() {
+    var $uploadTarget = $('#reply-control');
+    $uploadTarget.fileupload('destroy');
+    $uploadTarget.off();
+  },
 });
 
 // not sure if this is the right way, keeping here for now, we could use a mixin perhaps
@@ -400,6 +429,10 @@ Discourse.NotifyingTextArea = Ember.TextArea.extend({
 
   didInsertElement: function() {
     return this.get('parent').childDidInsertElement(this);
+  },
+
+  willDestroyElement: function() {
+    return this.get('parent').childWillDestroyElement(this);
   }
 });
 

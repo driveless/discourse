@@ -189,8 +189,6 @@ describe Category do
     it 'is created correctly' do
       @category.slug.should == 'amazing-category'
 
-      @category.hotness.should == 5.0
-
       @category.description.should be_blank
 
       Topic.where(category_id: @category).count.should == 1
@@ -208,6 +206,14 @@ describe Category do
       @topic.posts.count.should == 1
 
       @category.topic_url.should be_present
+
+      @category.posts_week.should  == 0
+      @category.posts_month.should == 0
+      @category.posts_year.should  == 0
+
+      @category.topics_week.should  == 0
+      @category.topics_month.should == 0
+      @category.topics_year.should  == 0
     end
 
     it "should not set its description topic to auto-close" do
@@ -267,6 +273,7 @@ describe Category do
       category.latest_post_id.should == post3.id
       category.latest_topic_id.should == post2.topic_id
 
+      post3.reload
 
       destroyer = PostDestroyer.new(Fabricate(:admin), post3)
       destroyer.destroy
@@ -363,6 +370,21 @@ describe Category do
       nested_sub_category = Fabricate.build(:category, parent_category_id: sub_category.id, user: user)
       nested_sub_category.should_not be_valid
 
+    end
+
+    describe ".query_parent_category" do
+      it "should return the parent category id given a parent slug" do
+        parent_category.name = "Amazing Category"
+        parent_category.id.should == Category.query_parent_category(parent_category.slug)
+      end
+    end
+
+    describe ".query_category" do
+      it "should return the category" do
+        category = Fabricate(:category, name: "Amazing Category", parent_category_id: parent_category.id, user: user)
+        parent_category.name = "Amazing Parent Category"
+        category.should == Category.query_category(category.slug, parent_category.id)
+      end
     end
 
   end

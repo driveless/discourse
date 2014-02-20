@@ -20,7 +20,15 @@ class TopicUser < ActiveRecord::Base
     end
 
     def notification_reasons
-      @notification_reasons ||= Enum.new(:created_topic, :user_changed, :user_interacted, :created_post)
+      @notification_reasons ||= Enum.new(
+        :created_topic,
+        :user_changed,
+        :user_interacted,
+        :created_post,
+        :auto_watch,
+        :auto_watch_category,
+        :auto_mute_category
+      )
     end
 
     def auto_track(user_id, topic_id, reason)
@@ -63,6 +71,7 @@ class TopicUser < ActiveRecord::Base
       user = user.id if User === user
       TopicUser.where('topic_id = ? and user_id = ?', topic, user).first
     end
+
 
     # Change attributes for a user (creates a record when none is present). First it tries an update
     # since there's more likely to be an existing record than not. If the update returns 0 rows affected
@@ -138,7 +147,7 @@ class TopicUser < ActiveRecord::Base
 
       # In case anyone seens "seen_post_count" and gets confused, like I do.
       # seen_post_count represents the highest_post_number of the topic when
-      # the user visited it. It may be out of alignement with last_read, meaning
+      # the user visited it. It may be out of alignment with last_read, meaning
       # ... user visited the topic but did not read the posts
       rows = exec_sql("UPDATE topic_users
                                     SET
@@ -173,7 +182,9 @@ class TopicUser < ActiveRecord::Base
         before_last_read = rows[0][2].to_i
 
         if before_last_read < post_number
+          # The user read at least one new post
           TopicTrackingState.publish_read(topic_id, post_number, user.id)
+          user.update_posts_read!(post_number - before_last_read)
         end
 
         if before != after
@@ -182,7 +193,9 @@ class TopicUser < ActiveRecord::Base
       end
 
       if rows.length == 0
+        # The user read at least one post in a topic that they haven't viewed before.
         TopicTrackingState.publish_read(topic_id, post_number, user.id)
+        user.update_posts_read!(post_number)
 
         args[:tracking] = notification_levels[:tracking]
         args[:regular] = notification_levels[:regular]
@@ -263,9 +276,9 @@ end
 #  cleared_pinned_at        :datetime
 #  unstarred_at             :datetime
 #  id                       :integer          not null, primary key
+#  last_emailed_post_number :integer
 #
 # Indexes
 #
 #  index_forum_thread_users_on_forum_thread_id_and_user_id  (topic_id,user_id) UNIQUE
 #
-

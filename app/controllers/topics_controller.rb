@@ -1,6 +1,7 @@
 require_dependency 'topic_view'
 require_dependency 'promotion'
 require_dependency 'url_helper'
+require_dependency 'topics_bulk_action'
 
 class TopicsController < ApplicationController
   include UrlHelper
@@ -19,7 +20,8 @@ class TopicsController < ApplicationController
                                           :move_posts,
                                           :merge_topic,
                                           :clear_pin,
-                                          :autoclose]
+                                          :autoclose,
+                                          :bulk]
 
   before_filter :consider_user_for_promotion, only: :show
 
@@ -120,7 +122,7 @@ class TopicsController < ApplicationController
     title, raw = params[:title], params[:raw]
     [:title, :raw].each { |key| check_length_of(key, params[key]) }
 
-    # Only suggest similar topics if the site has a minimmum amount of topics present.
+    # Only suggest similar topics if the site has a minimum amount of topics present.
     topics = Topic.similar_to(title, raw, current_user).to_a if Topic.count_exceeds_minimum?
 
     render_serialized(topics, BasicTopicSerializer)
@@ -264,6 +266,15 @@ class TopicsController < ApplicationController
     @topic_view = TopicView.new(params[:topic_id])
     discourse_expires_in 1.minute
     render 'topics/show', formats: [:rss]
+  end
+
+  def bulk
+    topic_ids = params.require(:topic_ids).map {|t| t.to_i}
+    operation = params.require(:operation).symbolize_keys
+    raise ActionController::ParameterMissing.new(:operation_type) if operation[:type].blank?
+    operator = TopicsBulkAction.new(current_user, topic_ids, operation)
+    changed_topic_ids = operator.perform!
+    render_json_dump topic_ids: changed_topic_ids
   end
 
   private

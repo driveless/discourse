@@ -37,6 +37,11 @@ Discourse.ScreenTrack = Ember.Object.extend({
   },
 
   stop: function() {
+    if(!this.get('topicId')) {
+      // already stopped no need to "extra stop"
+      return;
+    }
+
     this.tick();
     this.flush();
     this.reset();
@@ -84,7 +89,7 @@ Discourse.ScreenTrack = Ember.Object.extend({
     var newTimings = {},
         totalTimings = this.get('totalTimings');
 
-    _.each(this.get('timings'), function(timing,key) {
+    _.each(this.get('timings'), function(timing) {
       if (!totalTimings[timing.postNumber])
         totalTimings[timing.postNumber] = 0;
 
@@ -105,8 +110,9 @@ Discourse.ScreenTrack = Ember.Object.extend({
     var highestSeenByTopic = Discourse.Session.currentProp('highestSeenByTopic');
     if ((highestSeenByTopic[topicId] || 0) < highestSeen) {
       highestSeenByTopic[topicId] = highestSeen;
-      Discourse.TopicTrackingState.current().updateSeen(topicId, highestSeen);
     }
+
+    Discourse.TopicTrackingState.current().updateSeen(topicId, highestSeen);
 
     if (!$.isEmptyObject(newTimings)) {
       Discourse.ajax('/topics/timings', {

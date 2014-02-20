@@ -1,5 +1,3 @@
-/*global sanitizeHtml:true */
-
 module("Discourse.Markdown", {
   setup: function() {
     Discourse.SiteSettings.traditional_markdown_linebreaks = false;
@@ -173,7 +171,7 @@ test("Quotes", function() {
                 "handles quotes properly");
 
   cookedOptions("1[quote=\"bob, post:1\"]my quote[/quote]2",
-                { topicId: 2, lookupAvatar: function(name) { } },
+                { topicId: 2, lookupAvatar: function() { } },
                 "<p>1</p>\n\n<p><aside class=\"quote\" data-post=\"1\"><div class=\"title\"><div class=\"quote-controls\"></div>bob said:" +
                 "</div><blockquote><p>my quote</p></blockquote></aside></p>\n\n<p>2</p>",
                 "includes no avatar if none is found");
@@ -323,6 +321,9 @@ test("Code Blocks", function() {
          "<p><pre><code class=\"lang-auto\">[quote=&quot;sam, post:1, topic:9441, full:true&quot;]This is &#x60;&lt;not&gt;&#x60; a bug.[/quote]</code></pre></p>",
          "it allows code with backticks in it");
 
+  cooked("    hello\n<blockquote>test</blockquote>",
+         "<pre><code>hello</code></pre>\n\n<blockquote>test</blockquote>",
+         "it allows an indented code block to by followed by a `<blockquote>`");
 });
 
 test("sanitize", function() {
@@ -331,6 +332,8 @@ test("sanitize", function() {
   equal(sanitize("<i class=\"fa-bug fa-spin\">bug</i>"), "<i>bug</i>");
   equal(sanitize("<div><script>alert('hi');</script></div>"), "<div></div>");
   equal(sanitize("<div><p class=\"funky\" wrong='1'>hello</p></div>"), "<div><p>hello</p></div>");
+  equal(sanitize("<3 <3"), "&lt;3 &lt;3");
+  equal(sanitize("<_<"), "&lt;_&lt;");
   cooked("hello<script>alert(42)</script>", "<p>hello</p>", "it sanitizes while cooking");
 
   cooked("<a href='http://disneyland.disney.go.com/'>disney</a> <a href='http://reddit.com'>reddit</a>",
@@ -346,6 +349,9 @@ test("sanitize", function() {
   cooked("<iframe src=\"https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d2624.9983685732213!2d2.29432085!3d48.85824149999999!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2s!4v1385737436368\" width=\"100\" height=\"42\"></iframe>",
          "<iframe src=\"https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d2624.9983685732213!2d2.29432085!3d48.85824149999999!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2s!4v1385737436368\" width=\"100\" height=\"42\"></iframe>",
          "it allows iframe to google maps");
+  equal(sanitize("<textarea>hullo</textarea>"), "hullo");
+  equal(sanitize("<button>press me!</button>"), "press me!");
+  equal(sanitize("<canvas>draw me!</canvas>"), "draw me!");
 });
 
 test("URLs in BBCode tags", function() {

@@ -35,7 +35,6 @@ class User < ActiveRecord::Base
   has_one :facebook_user_info, dependent: :destroy
   has_one :twitter_user_info, dependent: :destroy
   has_one :github_user_info, dependent: :destroy
-  has_one :cas_user_info, dependent: :destroy
   has_one :oauth2_user_info, dependent: :destroy
   has_one :user_stat, dependent: :destroy
   belongs_to :approved_by, class_name: 'User'
@@ -63,6 +62,7 @@ class User < ActiveRecord::Base
   before_save :ensure_password_is_hashed
   after_initialize :add_trust_level
   after_initialize :set_default_email_digest
+  after_initialize :set_default_external_links_in_new_tab
 
   after_save :update_tracked_topics
 
@@ -82,6 +82,7 @@ class User < ActiveRecord::Base
   attr_accessor :notification_channel_position
 
   scope :blocked, -> { where(blocked: true) } # no index
+  scope :not_blocked, -> { where(blocked: false) } # no index
   scope :suspended, -> { where('suspended_till IS NOT NULL AND suspended_till > ?', Time.zone.now) } # no index
   scope :not_suspended, -> { where('suspended_till IS NULL') }
   # excluding fake users like the community user
@@ -94,6 +95,10 @@ class User < ActiveRecord::Base
 
   def self.username_length
     3..15
+  end
+
+  def custom_groups
+    groups.where(automatic: false)
   end
 
   def self.username_available?(username)
@@ -259,6 +264,10 @@ class User < ActiveRecord::Base
     !!@password_required
   end
 
+  def has_password?
+    password_hash.present?
+  end
+
   def password_validator
     PasswordValidator.new(attributes: :password).validate_each(self, :password, @raw_password)
   end
@@ -276,14 +285,21 @@ class User < ActiveRecord::Base
     last_seen_at.present?
   end
 
-  def has_visit_record?(date)
+  def visit_record_for(date)
     user_visits.where(visited_at: date).first
   end
 
   def update_visit_record!(date)
-    unless has_visit_record?(date)
-      user_stat.update_column(:days_visited, user_stat.days_visited + 1)
-      user_visits.create!(visited_at: date)
+    create_visit_record!(date) unless visit_record_for(date)
+  end
+
+  def update_posts_read!(num_posts, now=Time.zone.now)
+    if user_visit = visit_record_for(now.to_date)
+      user_visit.posts_read += num_posts
+      user_visit.save
+      user_visit
+    else
+      create_visit_record!(now.to_date, num_posts)
     end
   end
 
@@ -324,11 +340,11 @@ class User < ActiveRecord::Base
   def uploaded_avatar_path
     return unless SiteSetting.allow_uploaded_avatars? && use_uploaded_avatar
     avatar_template = uploaded_avatar_template.present? ? uploaded_avatar_template : uploaded_avatar.try(:url)
-    schemaless avatar_template
+    schemaless absolute avatar_template
   end
 
   def avatar_template
-    uploaded_avatar_path || User.gravatar_template(email)
+    uploaded_avatar_path || User.gravatar_template(id != -1 ? email : "team@discourse.org")
   end
 
   # The following count methods are somewhat slow - definitely don't use them in a loop.
@@ -354,6 +370,10 @@ class User < ActiveRecord::Base
   end
 
   def posted_too_much_in_topic?(topic_id)
+
+    # Does not apply to staff or your own topics
+    return false if staff? || Topic.where(id: topic_id, user_id: id).exists?
+
     trust_level == TrustLevel.levels[:newuser] && (Post.where(topic_id: topic_id, user_id: id).count >= SiteSetting.newuser_max_replies_per_topic)
   end
 
@@ -403,6 +423,7 @@ class User < ActiveRecord::Base
   def change_trust_level!(level)
     raise "Invalid trust level #{level}" unless TrustLevel.valid_level?(level)
     self.trust_level = TrustLevel.levels[level]
+    self.bio_raw_will_change! # So it can get re-cooked based on the new trust level
     transaction do
       self.save!
       Group.user_trust_level_change!(self.id, self.trust_level)
@@ -464,7 +485,7 @@ class User < ActiveRecord::Base
 
 
   def secure_category_ids
-    cats = self.staff? ? Category.where(read_restricted: true) : secure_categories.references(:categories)
+    cats = self.admin? ? Category.where(read_restricted: true) : secure_categories.references(:categories)
     cats.pluck('categories.id').sort
   end
 
@@ -517,11 +538,15 @@ class User < ActiveRecord::Base
     last_sent_email_address || email
   end
 
+  def leader_requirements
+    @lq ||= LeaderRequirements.new(self)
+  end
+
   protected
 
   def cook
     if bio_raw.present?
-      self.bio_cooked = PrettyText.cook(bio_raw) if bio_raw_changed?
+      self.bio_cooked = PrettyText.cook(bio_raw, omit_nofollow: self.has_trust_level?(:leader)) if bio_raw_changed?
     else
       self.bio_cooked = nil
     end
@@ -542,6 +567,11 @@ class User < ActiveRecord::Base
     email_tokens.create(email: email)
   end
 
+  def create_visit_record!(date, posts_read=0)
+    user_stat.update_column(:days_visited, user_stat.days_visited + 1)
+    user_visits.create!(visited_at: date, posts_read: posts_read)
+  end
+
   def ensure_password_is_hashed
     if @raw_password
       self.salt = SecureRandom.hex(16)
@@ -554,7 +584,7 @@ class User < ActiveRecord::Base
   end
 
   def add_trust_level
-    # there is a possiblity we did not load trust level column, skip it
+    # there is a possibility we did not load trust level column, skip it
     return unless has_attribute? :trust_level
     self.trust_level ||= SiteSetting.default_trust_level
   end
@@ -592,11 +622,16 @@ class User < ActiveRecord::Base
     end
   end
 
+  def set_default_external_links_in_new_tab
+    if has_attribute?(:external_links_in_new_tab) && self.external_links_in_new_tab.nil?
+      self.external_links_in_new_tab = !SiteSetting.default_external_links_in_new_tab.blank?
+    end
+  end
+
   private
 
   def previous_visit_at_update_required?(timestamp)
-    seen_before? &&
-      (last_seen_at < (timestamp - SiteSetting.previous_visit_timeout_hours.hours))
+    seen_before? && (last_seen_at < (timestamp - SiteSetting.previous_visit_timeout_hours.hours))
   end
 
   def update_previous_visit(timestamp)
@@ -648,7 +683,7 @@ end
 #  flag_level                    :integer          default(0), not null
 #  ip_address                    :inet
 #  new_topic_duration_minutes    :integer
-#  external_links_in_new_tab     :boolean          default(FALSE), not null
+#  external_links_in_new_tab     :boolean          not null
 #  enable_quoting                :boolean          default(TRUE), not null
 #  moderator                     :boolean          default(FALSE)
 #  blocked                       :boolean          default(FALSE)
@@ -658,6 +693,7 @@ end
 #  uploaded_avatar_template      :string(255)
 #  uploaded_avatar_id            :integer
 #  email_always                  :boolean          default(FALSE), not null
+#  mailing_list_mode             :boolean          default(FALSE), not null
 #
 # Indexes
 #

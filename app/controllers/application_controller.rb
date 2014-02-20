@@ -29,7 +29,7 @@ class ApplicationController < ActionController::Base
   before_filter :set_mobile_view
   before_filter :inject_preview_style
   before_filter :disable_customization
-  before_filter :block_if_maintenance_mode
+  before_filter :block_if_readonly_mode
   before_filter :authorize_mini_profiler
   before_filter :store_incoming_links
   before_filter :preload_json
@@ -49,7 +49,6 @@ class ApplicationController < ActionController::Base
     end
     raise
   end
-
 
   # Some exceptions
   class RenderEmpty < Exception; end
@@ -80,15 +79,22 @@ class ApplicationController < ActionController::Base
   end
 
   rescue_from Discourse::NotFound do
-    rescue_discourse_actions("[error: 'not found']", 404)
+    rescue_discourse_actions("[error: 'not found']", 404) # TODO: this breaks json responses
   end
 
   rescue_from Discourse::InvalidAccess do
-    rescue_discourse_actions("[error: 'invalid access']", 403)
+    rescue_discourse_actions("[error: 'invalid access']", 403) # TODO: this breaks json responses
+  end
+
+  rescue_from Discourse::ReadOnly do
+    render status: 405, json: failed_json.merge(message: I18n.t("read_only_mode_enabled"))
   end
 
   def rescue_discourse_actions(message, error)
     if request.format && request.format.json?
+      # TODO: this doesn't make sense. Stuffing an html page into a json response will cause
+      #       $.parseJSON to fail in the browser. Also returning text like "[error: 'invalid access']"
+      #       from the above rescue_from blocks will fail because that isn't valid json.
       render status: error, layout: false, text: (error == 404) ? build_not_found_page(error) : message
     else
       render text: build_not_found_page(error, 'no_js')
@@ -167,7 +173,7 @@ class ApplicationController < ActionController::Base
   # Our custom cache method
   def discourse_expires_in(time_length)
     return unless can_cache_content?
-    Middleware::AnonymousCache.anon_cache(request.env, 1.minute)
+    Middleware::AnonymousCache.anon_cache(request.env, time_length)
   end
 
   def fetch_user_from_params
@@ -208,8 +214,10 @@ class ApplicationController < ActionController::Base
     def custom_html_json
       MultiJson.dump({
         top: SiteContent.content_for(:top),
-        bottom: SiteContent.content_for(:bottom),
-      })
+        bottom: SiteContent.content_for(:bottom)
+      }.merge(
+        (SiteSetting.tos_accept_required && !current_user) ? {tos_signup_form_message: SiteContent.content_for(:tos_signup_form_message)} : {}
+      ))
     end
 
     def render_json_error(obj)
@@ -244,16 +252,6 @@ class ApplicationController < ActionController::Base
       end
     end
 
-    def block_if_maintenance_mode
-      if Discourse.maintenance_mode?
-        if request.format.json?
-          render status: 503, json: failed_json.merge(message: I18n.t('site_under_maintenance'))
-        else
-          render status: 503, file: File.join( Rails.root, 'public', '503.html' ), layout: false
-        end
-      end
-    end
-
     def mini_profiler_enabled?
       defined?(Rack::MiniProfiler) && current_user.try(:admin?)
     end
@@ -278,7 +276,14 @@ class ApplicationController < ActionController::Base
     end
 
     def redirect_to_login_if_required
-      redirect_to :login if SiteSetting.login_required? && !current_user
+      return if current_user || (request.format.json? && api_key_valid?)
+
+      redirect_to :login if SiteSetting.login_required?
+    end
+
+    def block_if_readonly_mode
+      return if request.fullpath.start_with?("/admin/backups")
+      raise Discourse::ReadOnly.new if !request.get? && Discourse.readonly_mode?
     end
 
     def build_not_found_page(status=404, layout=false)
