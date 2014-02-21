@@ -1,3 +1,12 @@
+GIT
+  remote: https://github.com/getsentry/raven-ruby.git
+  revision: 5fc3a9a58cd7e10182421434bba44f8e70465900
+  specs:
+    sentry-raven (0.7.1)
+      faraday (>= 0.7.6)
+      hashie (>= 1.1.0)
+      uuidtools
+
 PATH
   remote: vendor/gems/discourse_plugin
   specs:
@@ -9,7 +18,7 @@ PATH
     rails_multisite (0.0.1)
 
 GEM
-  remote: https://rubygems.org/
+  remote: http://rubygems.org/
   specs:
     actionmailer (4.0.2)
       actionpack (= 4.0.2)
@@ -378,6 +387,7 @@ GEM
       kgio (~> 2.6)
       rack
       raindrops (~> 0.7)
+    uuidtools (2.1.4)
 
 PLATFORMS
   ruby
@@ -454,6 +464,7 @@ DEPENDENCIES
   sass
   sass-rails
   seed-fu-discourse
+  sentry-raven!
   shoulda
   sidekiq (= 2.15.1)
   sidekiq-failures
