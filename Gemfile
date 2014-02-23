@@ -1,4 +1,5 @@
 source 'http://rubygems.org'
+ruby '2.0.0'
 
 # monkey patching to support dual booting
 module Bundler::SharedHelpers
