@@ -26,11 +26,6 @@ production:
         target: rails
         parse: false
         run_on: all_servers
-    # 5. Copy production.rb file
-      - source: /config/cloud/cloud66/files/production.rb
-        destination: <%= ENV['RAILS_STACK_PATH'] %>/config/environments/production.rb
-        target: rails
-        run_on: all_servers
     # 6. Move thin config to server
       - source: /config/cloud/cloud66/files/thin.yml
         destination: <%= ENV['RAILS_STACK_PATH'] %>/config/thin.yml
