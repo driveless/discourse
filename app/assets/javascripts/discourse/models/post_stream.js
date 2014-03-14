@@ -176,7 +176,7 @@ Discourse.PostStream = Em.Object.extend({
 
 
   /**
-    Cancel any active filters on the stream and refresh it.
+    Cancel any active filters on the stream.
 
     @method cancelFilter
     @returns {Ember.Deferred} a promise that resolves when the filter has been cancelled.
@@ -184,7 +184,6 @@ Discourse.PostStream = Em.Object.extend({
   cancelFilter: function() {
     this.set('summary', false);
     this.get('userFilters').clear();
-    return this.refresh();
   },
 
   /**
@@ -413,7 +412,9 @@ Discourse.PostStream = Em.Object.extend({
     @param {Discourse.Post} the post we saved in the stream.
   **/
   commitPost: function(post) {
-    this.appendPost(post);
+    if (this.get('loadedAllPosts')) {
+      this.appendPost(post);
+    }
     this.get('stream').addObject(post.get('id'));
     this.set('stagingPost', false);
   },
@@ -725,7 +726,11 @@ Discourse.PostStream = Em.Object.extend({
     // If the result is 403 it means invalid access
     if (status === 403) {
       topic.set('errorTitle', I18n.t('topic.invalid_access.title'));
-      topic.set('message', I18n.t('topic.invalid_access.description'));
+      if (Discourse.User.current()) {
+        topic.set('message', I18n.t('topic.invalid_access.description'));
+      } else {
+        topic.set('message', I18n.t('topic.invalid_access.login_required'));
+      }
       return;
     }
 

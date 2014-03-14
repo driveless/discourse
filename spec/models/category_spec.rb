@@ -145,25 +145,6 @@ describe Category do
     end
   end
 
-  describe 'caching' do
-    it "invalidates the site cache on creation" do
-      Site.expects(:invalidate_cache).once
-      Fabricate(:category)
-    end
-
-    it "invalidates the site cache on update" do
-      cat = Fabricate(:category)
-      Site.expects(:invalidate_cache).once
-      cat.update_attributes(name: 'new name')
-    end
-
-    it "invalidates the site cache on destroy" do
-      cat = Fabricate(:category)
-      Site.expects(:invalidate_cache).once
-      cat.destroy
-    end
-  end
-
   describe 'non-english characters' do
     let(:category) { Fabricate(:category, name: "電車男") }
 
@@ -348,6 +329,21 @@ describe Category do
     end
   end
 
+  describe "#url" do
+    it "builds a url for normal categories" do
+      category = Fabricate(:category, name: "cats")
+      expect(category.url).to eq "/category/cats"
+    end
+
+    describe "for subcategories" do
+      it "includes the parent category" do
+        parent_category = Fabricate(:category, name: "parent")
+        subcategory = Fabricate(:category, name: "child",
+                                parent_category_id: parent_category.id)
+        expect(subcategory.url).to eq "/category/parent/child"
+      end
+    end
+  end
 
   describe "parent categories" do
     let(:user) { Fabricate(:user) }
