@@ -9,5 +9,6 @@ then
 	echo "Plugin $DIR exists..."
 else
   bundle exec rake plugin:install repo=https://github.com/driveless/discourse-easy-signup
-  bundle exec rake assets:precompile
+  rm -fr tmp/cache
+  RAILS_ENV=production bundle exec rake assets:precompile
 fi

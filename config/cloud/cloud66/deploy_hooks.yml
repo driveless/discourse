@@ -33,6 +33,8 @@ production:
         execute: true
         sudo: true
     # i. Deploy discourse plugins
+    # dont forget this https://meta.discourse.org/t/brand-new-plugin-interface/8793/71
+    # if the plugins start acting stupid about loading
       - source: /config/cloud/cloud66/scripts/deploy_discourse_plugins.sh
         destination: /tmp/scripts/deploy_discourse_plugins.sh
         target: rails
