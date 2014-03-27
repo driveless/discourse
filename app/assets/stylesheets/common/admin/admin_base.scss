@@ -276,11 +276,54 @@ section.details {
   }
 
   .controls {
-    width: 600px;
+    width: 480px;
     float: left;
     margin-left: 12px;
     .btn {
       margin-right: 5px;
+    }
+  }
+}
+
+// Badges area
+.badges {
+  .content-list ul {
+    margin-bottom: 10px;
+  }
+
+  .current-badge {
+    margin: 20px;
+  }
+
+  .form-horizontal {
+    label {
+      font-weight: bold;
+    }
+    & > div {
+      margin-top: 10px;
+    }
+    .delete-link {
+      margin-left: 15px;
+      margin-top: 5px;
+    }
+
+    input, textarea, select {
+      width: 350px;
+    }
+
+    textarea {
+      height: 200px;
+    }
+  }
+
+  .buttons {
+    float: left;
+    width: 200px;
+    .saving {
+      padding: 5px 0 0 0;
+      margin-left: 10px;
+      width: 80px;
+      color: $secondary_text_color;
     }
   }
 }
@@ -998,4 +1041,8 @@ button.ru {
 
 .is-uploading:hover .ru-progress {
   background: rgba(200, 0, 0, 0.3);
+}
+
+.invisible {
+  visibility: hidden;
 }

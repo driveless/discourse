@@ -21,6 +21,7 @@ class User < ActiveRecord::Base
   has_many :user_open_ids, dependent: :destroy
   has_many :user_actions, dependent: :destroy
   has_many :post_actions, dependent: :destroy
+  has_many :user_badges, dependent: :destroy
   has_many :email_logs, dependent: :destroy
   has_many :post_timings
   has_many :topic_allowed_users, dependent: :destroy
@@ -566,7 +567,7 @@ class User < ActiveRecord::Base
     return I18n.t('redirected_to_top_reasons.new_user') if trust_level == 0 &&
       created_at > SiteSetting.redirect_new_users_to_top_page_duration.days.ago
     # long-time-no-see user
-    return I18n.t('redirected_to_top_reasons.not_seen_in_a_month') if last_seen_at < 1.month.ago
+    return I18n.t('redirected_to_top_reasons.not_seen_in_a_month') if last_seen_at && last_seen_at < 1.month.ago
     nil
   end
 
@@ -722,6 +723,9 @@ end
 #  uploaded_avatar_id            :integer
 #  email_always                  :boolean          default(FALSE), not null
 #  mailing_list_mode             :boolean          default(FALSE), not null
+#  primary_group_id              :integer
+#  locale                        :string(10)
+#  profile_background            :string(255)
 #
 # Indexes
 #

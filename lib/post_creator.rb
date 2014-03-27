@@ -64,15 +64,20 @@ class PostCreator
       track_topic
       update_topic_stats
       update_user_counts
+
       publish
       ensure_in_allowed_users if guardian.is_staff?
       @post.advance_draft_sequence
       @post.save_reply_relationships
     end
 
-    handle_spam
-    track_latest_on_category
-    enqueue_jobs
+    if @post
+      PostAlerter.post_created(@post)
+
+      handle_spam
+      track_latest_on_category
+      enqueue_jobs
+    end
 
     @post
   end
@@ -183,6 +188,7 @@ class PostCreator
     attrs = {last_posted_at: @post.created_at, last_post_user_id: @post.user_id}
     attrs[:bumped_at] = @post.created_at unless @post.no_bump
     attrs[:word_count] = (@topic.word_count || 0) + @post.word_count
+    attrs[:excerpt] = @post.excerpt(220, strip_links: true) if new_topic?
     @topic.update_attributes(attrs)
   end
 
@@ -203,6 +209,7 @@ class PostCreator
   end
 
   def rollback_if_host_spam_detected
+    return if @opts[:skip_validations]
     if @post.has_host_spam?
       @post.errors.add(:base, I18n.t(:spamming_host))
       @errors = @post.errors

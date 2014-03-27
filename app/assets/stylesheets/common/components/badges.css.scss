@@ -10,7 +10,7 @@
 
 %badge {
   display: inline-block;
-  font-weight: bold;
+  font-weight: normal;
   white-space: nowrap;
   @include border-radius-all(10px);
 }
@@ -19,20 +19,17 @@
 // --------------------------------------------------
 
 .badge-category {
-  padding: 4px 6px;
+  padding: 6px;
   color: $tertiary_text_color;
   font-size: 12px;
   font-weight: bold;
   white-space: nowrap;
+  display: inline-block;
+  line-height: 1;
   &[href] {
   color: $tertiary_text_color;
   }
-  &.restricted {
-    div {
-      display: inline-block;
-      margin: 0;
-    }
-  }
+
 }
 
 .d-dropdown .badge-category {
@@ -40,7 +37,6 @@
     div {
       display: inline-block;
       margin: 0;
-      padding-right: 6px;
     }
 }}
 
@@ -90,7 +86,7 @@ h1 a.badge-category div {vertical-align: top;}
 
 .badge-posts {
   color: $badge-posts-color;
-  font-weight: bold;
+  font-weight: normal;
   font-size: 14px;
   line-height: 1;
   &[href] {

@@ -326,7 +326,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     // Ctrl+v to paste so we should be conservative about what browsers this runs
     // in.
     var uaMatch = navigator.userAgent.match(/Firefox\/(\d+)\.\d/);
-    if (uaMatch && parseInt(uaMatch[1]) >= 26) {
+    if (uaMatch && parseInt(uaMatch[1]) >= 24) {
       self.$().append( Ember.$("<div id='contenteditable' contenteditable='true' style='height: 0; width: 0; overflow: hidden'></div>") );
       self.$().off('keydown.contenteditable');
       self.$().on('keydown.contenteditable', function(event) {
@@ -504,7 +504,7 @@ Discourse.ComposerView = Discourse.View.extend(Ember.Evented, {
     var $uploadTarget = $('#reply-control');
     $uploadTarget.fileupload('destroy');
     $uploadTarget.off();
-  },
+  }
 });
 
 // not sure if this is the right way, keeping here for now, we could use a mixin perhaps

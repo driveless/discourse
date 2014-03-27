@@ -382,9 +382,12 @@ a.star {
 #suggested-topics {
   clear: left;
   padding: 20px 0 15px 0;
-
-  .topics table tbody tr {background: $primary_background_color;}
-
+  #topic-list > tbody > tr:nth-child(even) {
+    background-color: lighten($secondary_background_color, 77%);
+  }
+  #topic-list > tbody > tr:nth-child(odd) {
+    background-color: $primary_background_color;
+  }
   table {
     box-shadow: none;
     border-radius: 0;
@@ -468,13 +471,14 @@ iframe {
   a.star {
     margin-right: 8px;
     font-size: 20px;
-    margin-top: 8px;
+    margin-top: 6px;
   }
 
   .topic-statuses {margin-top: -2px;}
 
   .badge-category {
     vertical-align: top;
+    margin-top: 4px;
   }
 
 }
@@ -759,7 +763,7 @@ blockquote { /* solo quotes */
   position: relative;
   padding: 10px 0 15px 0;
   .highlighted {
-    background-color: $highlight_background_color !important;
+    background-color: $emphasis_background_color !important;
   }
   img, svg {
     max-width: 100%;
