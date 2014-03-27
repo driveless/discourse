@@ -31,6 +31,12 @@ production:
         destination: <%= ENV['RAILS_STACK_PATH'] %>/config/unicorn.rb
         target: rails
         run_on: all_servers
+    # i. Deploy discourse plugins
+      - source: /config/cloud/cloud66/scripts/deploy_discourse_plugins.sh
+        destination: /tmp/scripts/deploy_discourse_plugins.sh
+        target: rails
+        run_on: all_servers
+        execute: true
     after_rails:
     # 7. Set environment variables and allow PSQL user to access them
       - source: /config/cloud/cloud66/scripts/env_vars.sh
