@@ -232,6 +232,9 @@ $.fn.autocomplete = function(options) {
     if (completeStart === null) return;
 
     if (r && r.then && typeof(r.then) === "function") {
+      if (div) {
+        div.hide().remove();
+      }
       r.then(updateAutoComplete);
       return;
     }
@@ -243,7 +246,6 @@ $.fn.autocomplete = function(options) {
       renderAutocomplete();
     }
   };
-
 
   // chain to allow multiples
   var oldClose = me.data("closeAutocomplete");
@@ -270,7 +272,7 @@ $.fn.autocomplete = function(options) {
     }
   });
 
-  return $(this).keydown(function(e) {
+  $(this).keydown(function(e) {
     var c, caretPosition, i, initial, next, prev, prevIsGood, stopFound, term, total, userToComplete;
 
     if(options.allowAny){
@@ -405,4 +407,6 @@ $.fn.autocomplete = function(options) {
       }
     }
   });
+
+  return this;
 };

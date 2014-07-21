@@ -3,8 +3,6 @@ require_dependency 'badge'
 
 describe Badge do
 
-  it { should belong_to :badge_type }
-
   context 'validations' do
     before(:each) { Fabricate(:badge) }
 

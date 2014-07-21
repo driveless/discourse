@@ -20,15 +20,14 @@ Discourse.AdminUserController = Discourse.ObjectController.extend({});
 Discourse.AdminUserIndexController = Discourse.ObjectController.extend({
   editingTitle: false,
 
-  showApproval: function() {
-    return Discourse.SiteSettings.must_approve_users;
-  }.property(),
-
-  showBadges: function() {
-    return Discourse.SiteSettings.enable_badges;
-  }.property(),
+  showApproval: Discourse.computed.setting('must_approve_users'),
+  showBadges: Discourse.computed.setting('enable_badges'),
 
   primaryGroupDirty: Discourse.computed.propertyNotEqual('originalPrimaryGroupId', 'primary_group_id'),
+
+  custom_groups: Ember.computed.filter("model.groups", function(g){
+    return (!g.automatic && g.visible);
+  }),
 
   actions: {
     toggleTitleEdit: function() {
@@ -48,6 +47,18 @@ Discourse.AdminUserIndexController = Discourse.ObjectController.extend({
 
     generateApiKey: function() {
       this.get('model').generateApiKey();
+    },
+
+    groupAdded: function(added){
+      this.get('model').groupAdded(added).catch(function() {
+        bootbox.alert(I18n.t('generic_error'));
+      });
+    },
+
+    groupRemoved: function(removed){
+      this.get('model').groupRemoved(removed).catch(function() {
+        bootbox.alert(I18n.t('generic_error'));
+      });
     },
 
     savePrimaryGroup: function() {
